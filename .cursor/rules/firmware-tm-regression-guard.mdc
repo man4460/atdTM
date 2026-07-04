@@ -1,0 +1,103 @@
+---
+description: TM1637 — กัน regression หลังแก้ 0000/reboot/WDT/S3 (บันทึก 2026-07-04)
+alwaysApply: true
+---
+
+# ATD_TM — กันแก้แล้วแย่ลง (Regression Guard)
+
+อ่านคู่กับ `firmware-tm-board-deploy.mdc` ก่อนแก้ `platformio.ini`, `varable.h` OldBoard, WDT, OTA
+
+---
+
+## ปัญหาเดิม → แก้แล้ว (อย่าทำให้กลับมา)
+
+| อาการ | สาเหตุจริง | แก้ที่ | อย่า regression |
+|--------|------------|--------|------------------|
+| รีบูทวน ~3.6s, log `[WDT] task hang … taskWifiMqtt` | false positive task-hang WDT v3.50–3.51 | v3.53: `BOOT_HANG_GRACE_MS` 60s, `hangElapsedMs()` | อย่าลบ grace / อย่าเช็ค `(now-hb)` แบบ unsigned ตรง ๆ |
+| รีบูทวน ~30s, log `task_wdt: IDLE0` + `CPU 0: taskWifiMqtt` | `mqclient.connect()` block บน core 0 | v3.60: `taskWifiMqtt` **core 1** | **ห้าม** ปัก taskWifiMqtt กลับ core 0 |
+| จอค้าง **0000** หลัง boot | countdown 3 วิ แล้วไม่ handoff standby; `statedisplaystandby==3` | v3.52: `primeBootStandbyDisplay()`, กู้ orphan state, CH_RECOVERY | อย่าลบ `primeBootStandbyDisplay()`; อย่าปล่อย case 0 ไม่วาด standby |
+| upload fail `ESP32 not ESP32-S3` | ตั้ง `default_envs=esp32s3_tm` แต่ TM = classic | v3.57: เหลือ `esp32dev` อย่างเดียว | **ห้าม** เพิ่ม S3 env / default S3 ในโปรเจกต์ TM |
+| OTA `chip mismatch expected 0 found 9` | ส่ง bin ESP32 ไปเครื่อง S3 (สับสนโปรเจกต์) | แยก: TM=`ai_new`, ATD35=`ai_touch` | **ห้าม** `ai_new_s3` ใน TM `varable.h` |
+| v3.32 ใช้ได้ → 3.51 พัง | task-hang WDT ใหม่ + ไม่ handoff จอ | v3.52–3.57 รวมกัน | อย่า assume “บอร์ดใหม่ = S3” จาก OTA error เครื่องเดียว |
+| MQTT หลุดบ่อย / ไม่ต่อตอนรันโปรแกรม | warmup 4s + teardown ทันที + port++ ทุก reconnect | **v3.58:** hysteresis 2.5s, warmup 2s/1s, port++ เฉพาะ fail | อย่าเพิ่ม warmup กลับ 4s; อย่า `mqtt_port1++` ก่อน connect |
+
+---
+
+## การแก้ที่เคยทำแล้วแย่ลง (v3.53 → v3.56)
+
+เรียงเหตุการณ์ — **อย่าทำซ้ำ**
+
+1. **v3.53** เพิ่ม `esp32s3_tm` ถูกทิศทาง (กัน flash classic ลง S3) แต่ยังไม่ชัดว่า TM ทั้งหมดเป็น classic
+2. **v3.55** สันนิษฐาน “บอร์ดใหม่ = S3 ทั้งหมด” → `userID=ai_new_s3`, LDR 1/2 — **ผิด** สำหรับ 69M540494 (classic)
+3. **v3.56** ตั้ง `default_envs=esp32s3_tm` → **upload ไม่ได้** บน classic (`Wrong --chip argument`)
+4. **v3.57** คืน classic-only — **สถานะ deploy ที่ถูก**
+
+**บทเรียน:** ยืนยันชิปจาก `[Chip]` serial / upload error ก่อนเปลี่ยน env หรือ OTA folder — อย่า generalize จากเครื่องเดียว
+
+---
+
+## ห้ามทำ (hard rules)
+
+### platformio.ini
+- ❌ `default_envs = esp32s3_tm` หรือ env S3 ในโปรเจกต์ TM
+- ❌ ลบ `esp32dev` ออกจาก TM
+- ✅ TM: `[env:esp32dev]` อย่างเดียว; S3 ไป **ATD35_Melody_V3**
+
+### varable.h OldBoard 0
+- ❌ `userID = "ai_new_s3"` หรือ LDR 1/2 สำหรับ TM1637
+- ❌ `#if CONFIG_IDF_TARGET_ESP32S3` ใน TM (ไม่มี S3 build แล้ว)
+- ✅ `userID = "ai_new"`, LDR **36/39**, ปุ่ม **34,35**,32,33,25
+
+### main.cpp — WDT / จอ
+- ❌ ลบ `BOOT_HANG_GRACE_MS` หรือ `hangElapsedMs()`
+- ❌ ลบ `primeBootStandbyDisplay()` / การกู้ `statedisplaystandby==3` ตอน idle
+- ❌ ย้าย `taskWifiMqtt` กลับ core 1 โดยไม่ทดสอบ boot
+- ✅ หลังแก้ WDT ต้อง boot 10 วิ โดยไม่มี `[WDT] task hang`
+
+### สับสน OldBoard vs ชิป
+- **OldBoard 0/1** = ชุด **ขา/pin** (ใหม่ vs เก่า) — ทั้งคู่เป็น **ESP32 classic**
+- **ATD35** = **ESP32-S3** — คนละ repo
+- อย่าใช้ OldBoard 0 แปลว่า S3
+
+---
+
+## Checklist ก่อน deploy / หลังแก้ boot-WiFi-จอ
+
+```
+[ ] OldBoard ใน varable.h ตรงเครื่อง (0=ใหม่, 1=เก่า)
+[ ] pio run -e esp32dev (ไม่ใช่ s3)
+[ ] Serial: [Chip] ESP32 (ไม่ใช่ ESP32-S3)
+[ ] Serial: ไม่มี [WDT] task hang ใน 60 วิแรก
+[ ] หลัง ~3 วิ: จอ standby/ราคา ไม่ค้าง 0000
+[ ] OTA: ai_new (OldBoard 0) หรือ ai_old (OldBoard 1)
+[ ] bump เวอร์ชัน + CHANGELOG + ATD35 sync (ถ้าแก้ production)
+```
+
+**เครื่องอ้างอิง:** `69M540494`, gid 54, OldBoard 0, ESP32 classic
+
+---
+
+## ยังเปิดอยู่ (แก้แล้วอาจไม่พอ)
+
+- ปุ่ม GPIO **34, 35** บอร์ดใหม่: `INPUT_PULLUP` ไม่ทำงาน — ต้อง pull-up บน PCB หรือแก้ `pinMode` + debounce (ยังไม่ merge v3.57)
+- MelodyWebapp อาจมี `ai_new_s3` ค้างจากรอบ debug — TM OTA ใช้ **`fw/ai_new/`** เท่านั้น
+
+---
+
+## ไฟล์ที่มักโดน regression
+
+| ไฟล์ | ระวัง |
+|------|--------|
+| `platformio.ini` | env / default_envs |
+| `src/varable.h` | OldBoard, userID, LDR, mqtt_port |
+| `src/main.cpp` | `checkTaskHang`, `primeBootStandbyDisplay`, `setupWaitAdminRestoreFactory` |
+| Melody `ota-user-id-map.util.ts` | อย่า redirect `ai_new` → `ai_new_s3` สำหรับ TM classic |
+
+---
+
+## เอกสารอ้างอิง
+
+- `.cursor/rules/firmware-tm-board-deploy.mdc` — deploy & อาการ
+- `STABILITY_NOTES.md` — network / WDT
+- `CHANGELOG.md` v3.52–v3.57
+- Chat: `d2f3e81f-2c46-480f-9348-5a7c6114117f`

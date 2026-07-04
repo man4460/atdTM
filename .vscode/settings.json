@@ -1,0 +1,14 @@
+{
+    "files.associations": {
+        "optional": "cpp",
+        "istream": "cpp",
+        "ostream": "cpp",
+        "system_error": "cpp",
+        "array": "cpp",
+        "functional": "cpp",
+        "tuple": "cpp",
+        "type_traits": "cpp",
+        "utility": "cpp"
+    },
+    "cmake.sourceDirectory": "D:/ESP32/ATD_TM_V2_New_Hier/lib/ArduinoJson-7.x"
+}
