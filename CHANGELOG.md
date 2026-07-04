@@ -6,6 +6,182 @@
 
 ---
 
+## Version 3.76 (2026-07-04)
+
+### แก้ crash `pbuf_free: p->ref > 0` (recv ซ้อนข้าม task) + คืน keepAlive 60
+
+- **หลักฐาน (v3.75 log):** keepAlive 15 → drop rc=-4 ถี่ขึ้นมาก (ทุก ~30 วิ) → churn reconnect สูง → crash:
+  ```
+  assert failed: pbuf_free ... (pbuf_free: p->ref > 0)
+  #14 PubSubClient::loop()  #15 mqttPumpLoopLocked  #16 taskWifiMqtt
+  ```
+- **สาเหตุจริง:** `updateWiFiIcon()` (รันใน **taskDisplay**) เรียก `mqclient.connected()` ตรง ๆ → `WiFiClient::connected()` เรียก `recv()` บน socket **พร้อมกับ** `mqclient.loop()` ที่ `recv()` ใน taskWifiMqtt = อ่าน socket เดียวกัน 2 task → lwIP pbuf double-free → รีบูต
+- **แก้:**
+  - เพิ่ม cache `volatile bool g_mqttOnline` อัปเดตเฉพาะใน taskWifiMqtt; `updateWiFiIcon()` + web/LVGL config handler อ่าน cache แทน (ไม่แตะ socket ข้าม task)
+  - คืน `setKeepAlive(60)` — keepAlive 15 พิสูจน์แล้วว่า drop ถี่ขึ้น + churn กระตุ้น crash (broker ไม่ตอบ ping ตอน idle จริง)
+- ไฟล์: `src/main.cpp`
+
+### Rollback
+
+- ย้อนไป: **Version 3.74** (keepAlive 60, ไม่มี cache — มีความเสี่ยง crash เดิม)
+- ไฟล์: `src/main.cpp`, `src/varable.h`
+
+---
+
+## Version 3.75 (2026-07-04)
+
+### ทดลอง keepAlive 60→15 (แก้ MQTT หลุด rc=-4 ตอน idle) — อยู่ระหว่างทดสอบหน้างาน
+
+- **หลักฐาน (v3.72 log):** `[MQTT] dropped rc=-4 wifi=3 rssi=-51` วนซ้ำตอน off/idle → ping timeout, WiFi/สัญญาณดี = broker/NAT ปิด TCP ตอน idle ก่อน 60s
+- **ทดลอง:** `setKeepAlive(15)` — ping ทุก 15s อุ่น connection กัน idle-close
+- **สถานะ:** กำลังทดสอบว่า drop ลดลงจริงไหม (ถ้าลด = idle-close; ถ้าเท่าเดิม/ถี่ขึ้น = broker ไม่ตอบ ping → ย้อนกลับ 60)
+- ไฟล์: `src/main.cpp`
+
+### Rollback
+
+- ย้อนไป: **Version 3.74** (keepAlive 60)
+
+---
+
+## Version 3.74 (2026-07-04)
+
+### 5 นาทีสุดท้าย ส่ง UpdateState ทุก 1 นาที (เวลา ESP↔server ตรงกันสุด)
+
+- เดิม: ส่งทุก `statusReportIntervalMinutes` (default 5 นาที) ตลอดรอบ
+- เพิ่ม: เมื่อเวลาที่เหลือ `hrs==0 && minn<=5` → ส่งทุก 1 นาที เพื่อให้ค่าเวลาใกล้จบตรงกับ server มากที่สุด
+- ไฟล์: `src/main.cpp` (`machineRuning`)
+
+### Rollback
+
+- ย้อนไป: **Version 3.73**
+
+---
+
+## Version 3.73 (2026-07-04)
+
+### log RunSession save แสดงเวลาที่บันทึก
+
+- เพิ่มเวลา (`hrs:minn:second` จาก snapshot จริง) ต่อท้าย `[RunSession] save phase=X time=H:M:S`
+- ช่วยยืนยันว่า autosave เก็บเวลาที่เหลือถูกต้อง (phase เดิมแต่เวลาเปลี่ยน)
+- ไฟล์: `src/run_session.h`
+
+### Rollback
+
+- ย้อนไป: **Version 3.72**
+
+---
+
+## Version 3.72 (2026-07-04)
+
+### แก้ MQTT หลุดซ้ำทั้งที่ WiFi ยังต่อ (socket timeout 6→15 = ตรง 3.00) + log สาเหตุ
+
+- **อาการ (3.69 หน้างาน):** ระหว่างอบ connect 4741 สำเร็จทุกครั้ง แต่ ~นาทีละครั้งหลุด→reconnect (มี `presence online` ซ้ำทุกรอบ = fresh connect จริง)
+- **สาเหตุ:** log เดิมไม่บอกเหตุ (พิมพ์ "MQTT server" หลังหลุดแล้ว) แต่ connect สำเร็จทุกครั้ง = broker ไม่ปฏิเสธ → socket ถูกตัดหลัง connect จุดต่างจริงจาก 3.00 (เสถียร) = `setSocketTimeout(6)`/`client.setTimeout(6000)` — 3.00 ใช้ default 15s → 6s ตัด socket เร็วเกินตอน WiFi jitter/แพ็กเก็ตช้า
+- **แก้:**
+  - `setSocketTimeout(15)` + `client.setTimeout(15000)` + `MQTT_SOCKET_TIMEOUT=15` (platformio) — ตรงกับ 3.00
+  - เพิ่ม log `[MQTT] dropped rc=.. wifi=.. rssi=..` ตอน connected→disconnected เพื่อยืนยันสาเหตุหน้างาน (rc=-3 TCP ถูกตัด / -4 ping timeout / -1 เราสั่ง)
+- **ยืนยันหน้างาน:** ถ้ายังหลุด ดู `rc`: `-4`=keepalive/loop starve, `-3`=network ตัด (RSSI ต่ำ?), `-1`=teardown จาก WiFi hysteresis
+
+### Rollback
+
+- ย้อนไป: **Version 3.71**
+- ไฟล์: `src/main.cpp`, `platformio.ini`, `src/varable.h`
+
+---
+
+## Version 3.71 (2026-07-04)
+
+### MQTT reconnect — backoff เบา 5→15s + เปลี่ยนพอร์ตหลัง fail 4 ครั้งในพอร์ตเดิม
+
+- อยู่พอร์ตเดิมก่อน (broker หลักอาจแค่สะดุด) — fail ครบ **4 ครั้งในพอร์ตเดียว** ค่อยหมุนพอร์ต, เปลี่ยนแล้วเริ่ม backoff ใหม่ที่ 5s
+- backoff **5→10→15s** (cap 15s) ระหว่างพยายามพอร์ตเดิม — ไม่ยาวถึง 60s
+- คงไว้: keepalive 60s, single-close (3.69), pump loop() ทุกลูป
+
+### Rollback
+
+- ย้อนไป: **Version 3.70**
+- ไฟล์: `src/main.cpp`, `src/varable.h`
+
+---
+
+## Version 3.70 (2026-07-04)
+
+### MQTT reconnect กลับเป็น 3.00-style (แก้ "หลุดบ่อย/ต่อกลับช้า")
+
+- **อาการ:** MQTT หลุดแล้วต่อกลับช้า/นาน
+- **สาเหตุ:** exponential backoff 5→60s (รัน cap 15s) — หลุดทีต้องรอนานถึงจะ retry (3.00 retry คงที่ 5s เสมอ)
+- **แก้:** `mqttreconnect()` retry **คงที่ 5s** + หมุน port ทุกครั้งที่ fail (ตรง 3.00) — ตัด backoff/`mqttPortsTried` ออก
+- คงไว้: keepalive 60s, single-close (3.69), pump `mqclient.loop()` ทุกลูปตอน connected
+- **หมายเหตุ loop:** การ pump loop() ปัจจุบันเพียงพอแล้ว (~ทุก 10ms ตอน connected เท่า 3.00) — ตัวที่ทำให้รู้สึกหลุดคือ backoff
+
+### Rollback
+
+- ย้อนไป: **Version 3.69**
+- ไฟล์: `src/main.cpp`, `src/varable.h`
+
+---
+
+## Version 3.69 (2026-07-04)
+
+### แก้ crash รีบูตกลางงาน: lwIP `assert pbuf_free: p->ref > 0` (double-close socket)
+
+- **อาการ (3.65 หน้างาน):** เครื่องกำลังอบ (00:10:52) → MQTT reconnect → `[MQTT] presence online` → crash `assert pbuf_free p->ref>0` ใน `mqttPumpLoopLocked` (`mqclient.loop()`) → `SW_CPU_RESET`
+- **สาเหตุ:** ปิด socket ซ้ำสองครั้ง — `mqclient.disconnect()` (เรียก `client.stop()` ในตัวอยู่แล้ว) ตามด้วย `client.stop()` ซ้ำ → lwIP pbuf refcount เพี้ยน → assert ตอน recv ของ socket ใหม่ (3.32/3.00 ไม่มี pattern นี้ จึงไม่ crash)
+- **แก้ (3 จุด):** `mqttreconnect()`, `teardownMqttOnWifiDown()`, `pauseMqttForOta()` → ปิด **ครั้งเดียว**: `if (connected) mqclient.disconnect(); else client.stop();`
+- **หมายเหตุ:** 3.68 (watchdog/recovery) ไม่ได้แตะ crash ตัวนี้ — ต้อง 3.69
+
+### Rollback
+
+- ย้อนไป: **Version 3.68**
+- ไฟล์: `src/main.cpp`, `src/varable.h`
+
+---
+
+## Version 3.68 (2026-07-04)
+
+### กู้รอบงานเฉพาะไฟดับเท่านั้น (run-session recovery gate)
+
+- **เจตนา:** เริ่มกู้รอบซัก/อบต่อ **เฉพาะเมื่อไฟดับจริง** — รีบูตจากสาเหตุอื่นไม่ต้องกู้ (กันระบบรวนจาก resume ผิดจังหวะ)
+- **แก้:** `runSessionBeginRecovery()` เช็ค `esp_reset_reason()` — กู้เฉพาะ `ESP_RST_POWERON` / `ESP_RST_BROWNOUT`; reset จาก software / watchdog / crash / OTA → ล้าง snapshot + ไม่กู้
+- ไฟล์: `src/run_session.h`
+
+### Rollback
+
+- ย้อนไป: **Version 3.67**
+- ไฟล์: `src/run_session.h`, `src/varable.h`
+
+---
+
+## Version 3.67 (2026-07-04)
+
+### watchdog เช็คห่างขึ้น 10 วิ (ต่อจาก 3.66)
+
+- `loop()` เรียก `checkTaskHang()` ทุก **10 วิ** (เดิม 1 วิ) — ลดโอกาส false-trigger
+- ยืนยัน: ตอนเครื่องทำงาน/เตรียม **ไม่รีบูทเองเลย** (3.66) — ระหว่างทำงานพฤติกรรมเท่ากับ 3.00 (ไม่มี watchdog)
+
+### Rollback
+
+- ย้อนไป: **Version 3.66**
+- ไฟล์: `src/main.cpp`, `src/varable.h`
+
+---
+
+## Version 3.66 (2026-07-04)
+
+### กันรีบูทเองระหว่างทำงาน (เทียบ 3.00 = เสถียรสุด ไม่มี watchdog)
+
+- **อาการ:** 3.65 ยังรีบูทเองระหว่างเครื่องทำงาน
+- **สาเหตุ:** `checkTaskHang()` ใน `loop()` (3.00 ไม่มี — `loop()` แค่ `delay(10)`) false-trigger กลางรอบซัก/อบ (busy-loop `checkLightStart`, relay delay, MQTT block) → `ESP.restart()`
+- **แก้:** `checkTaskHang()` ข้ามการรีบูทเมื่อ `status_machine_run || status_machine_prepare` + feed heartbeat กันค้างสะสมหลังจบงาน — ตอนรันไม่รีบูทเอง (เหมือน 3.00), ตอน idle ยังกู้ตัวเองได้
+- คงไว้: boot grace 60s, low-heap guard (ตอน idle), taskWifiMqtt core 1 (ตรง 3.00)
+
+### Rollback
+
+- ย้อนไป: **Version 3.65**
+- ไฟล์: `src/main.cpp`, `src/varable.h`
+
+---
+
 ## Version 3.65 (2026-07-04)
 
 ### จอ TM1637 — คืนส่วนโปรแกรม/จอ ให้ตรง 3.32 เป๊ะ (แก้กระพริบ)
