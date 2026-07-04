@@ -106,7 +106,6 @@ void suspendMachineTasksForOta();
 void restoreMachineTasksAfterOta();
 void taskDisplay(void *parameter);
 void taskProgram(void *parameter);
-static void displayShowRunTimer(bool colonOn);
 /** MQTT presence/LWT — topic presence/{Noserial} สำหรับ MelodyWebapp */
 bool publishPresenceOnline();
 void publishPresenceOfflineGraceful();
@@ -971,10 +970,7 @@ void setStartMachine(int dryFirstPaymentBaht = 0)
   step = 0;
   indexSet = 0;
   delay(100);
-  if (Mode == 2)
-    displayShowRunTimer(true);  // อบ: โชว์เวลาจริง (เช่น 00:31) ตรง MQTT
-  else
-    display.showNumberDecEx(0, 0b01000000, true, 4, 0); // ซัก: ack แรก 00:00
+  display.showNumberDecEx(0, 0b01000000, true, 4, 0); // 3.32: โชว์ 00:00 (มีจุด) ทั้งอบ/ซัก
   status_machine_prepare = true;
   // ส่ง ack ทันทีที่รับคำสั่ง (Status=running, Time อาจเป็น 00:00 สำหรับเครื่องซัก)
   // เพื่อให้ Melody ขึ้น "กำลังทำงาน" เร็ว ไม่ต้องรอ setProgram (หลัง standby + power check)
@@ -1180,11 +1176,6 @@ void secondMillis()
 }
 void standbyDisplay()
 {
-  // ระหว่างเครื่องทำงาน/เตรียม ห้ามวาด standby เด็ดขาด — machineRuning() ถือจอโชว์เวลาที่เดียว
-  // (กันจอกระพริบสลับ เวลา<->standby เมื่อ 2 task แตะ TM1637 พร้อมกัน / statedisplaystandby race)
-  if (status_machine_run || status_machine_prepare)
-    return;
-
   // เมื่อแอดมินส่ง getdata มา แสดง "PC" บนจอสัก 2.5 วินาที
   if (getdataDisplayUntil != 0 && millis() < getdataDisplayUntil) {
     display.setSegments(SEG_PC);
@@ -1311,15 +1302,6 @@ bool shouldUpdate(unsigned long interval, unsigned long &lastTime) {
 }
 
 /** แสดงเวลา hh:mm บน TM1637 (pos 0–1 = ชม., 2–3 = นาที) */
-static void displayShowRunTimer(bool colonOn)
-{
-  if (colonOn)
-    display.showNumberDecEx(hrs, 0b01000000, true, 2, 0);
-  else
-    display.showNumberDec(hrs, true, 2, 0);
-  display.showNumberDec(minn, true, 2, 2);
-}
-
 void updateWiFiIcon()
 {
   static unsigned long timeIcon = 0;
@@ -1449,10 +1431,19 @@ void machineRuning()
         // Serial.println("state => " + StatusControl + " :: " + String(hrs) + " : " + String(minn) + " : " + String(second));
       }
 
-      // วาดเวลาที่นี่ที่เดียว (task เดียว) — กันจอ TM1637 bit-bang รวนจากการเขียนซ้อน
       static bool dot = false;
-      displayShowRunTimer(!dot);
-      dot = !dot;
+      if (!dot)
+      {
+        display.showNumberDecEx(hrs, 0b11100000, true, 2, 0);
+        display.showNumberDec(minn, true, 2, 2);
+        dot = true;
+      }
+      else
+      {
+        display.showNumberDec(hrs, true, 2, 0);
+        display.showNumberDec(minn, true, 2, 2);
+        dot = false;
+      }
 
       machine_runing_time = millis();
     }
@@ -3126,11 +3117,8 @@ void taskProgram(void *parameter)
         }
         else if (statedisplaystandby == 3)
         {
-          // ดีไซน์ 3.51: state 3 = งด standbyDisplay; ให้ machineRuning() โชว์ timer ที่เดียว
-          // prepare: จอค้างเวลาที่ setStartMachine วาดไว้ (2 วิ) จน run แล้ว machineRuning เดินต่อ
-          // orphan (ไม่ทำงานจริง เช่น recovery abort/reset) → คืนเป็น 0 ให้วาด standby (fix 3.52)
-          if (!status_machine_run && !status_machine_prepare)
-            statedisplaystandby = 0;
+          // 3.32: not thing — state 3 คงไว้ตลอดตอนรัน/เตรียม ให้ machineRuning() โชว์ timer ที่เดียว
+          // orphan จาก recovery จัดการที่ CH_RECOVERY / RUN_RECOVERY_ABORTED แล้ว (ไม่ปัด state ที่นี่ กัน race กับ taskDisplay)
         }
         else if (statedisplaystandby == 4)
         {

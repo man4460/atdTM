@@ -6,6 +6,25 @@
 
 ---
 
+## Version 3.65 (2026-07-04)
+
+### จอ TM1637 — คืนส่วนโปรแกรม/จอ ให้ตรง 3.32 เป๊ะ (แก้กระพริบ)
+
+- **root cause กระพริบ:** orphan reset `statedisplaystandby==3 → 0` ใน `case 0` (taskProgram) แข่ง (race) กับ `prepareRunMachine()`/`machineRuning()` ที่อยู่ใน **taskDisplay** — ตอนสลับ prepare→run มีช่องที่ `!run && !prepare` ชั่วขณะ → ปัด state เป็น 0 → `standbyDisplay()` แทรก 1 เฟรม
+- **แก้ (ตาม 3.32):**
+  - `case 0 statedisplaystandby==3` → **not thing** (ไม่ปัด state; orphan จัดการที่ `CH_RECOVERY`/`RUN_RECOVERY_ABORTED` อยู่แล้ว → 0000 ไม่กลับมา)
+  - `setStartMachine()` → โชว์ `00:00` (มีจุด) ทั้งอบ/ซัก แล้วปล่อย `machineRuning()` เดินต่อ
+  - `machineRuning()` → วาด `hrs:minn` toggle จุด แบบ 3.32 (`0b11100000`)
+  - ลบ guard ใน `standbyDisplay()` และฟังก์ชัน `displayShowRunTimer()` (ไม่ใช้แล้ว)
+- คงไว้: reset `chanel/step/indexSet=0` ใน setStartMachine (กันค้าง setting mode BT4), boot fix 3.52 (CH_RECOVERY/primeBootStandby)
+
+### Rollback
+
+- ย้อนไป: **Version 3.64**
+- ไฟล์: `src/main.cpp`, `src/varable.h`
+
+---
+
 ## Version 3.64 (2026-07-04)
 
 ### จอ TM1637 — คืนดีไซน์ 3.51 (statedisplaystandby=3 + machineRuning วาด timer ที่เดียว)
