@@ -6,6 +6,26 @@
 
 ---
 
+## Version 3.84 (2026-07-07)
+
+### กลับไปโมเดลเน็ต v3.78 (ตอบสนองดี) + เก็บเฉพาะ HTTP revenue
+
+- **ทำไม:** v3.80–3.83 (keepAlive 90s + ย้าย `mqclient.loop()` เข้า `loop()` แบบ single-thread + no-op mutex) ทำให้ **สั่งการ MQTT ไม่ตอบสนอง** ทั้งที่ broker รับคำสั่งแล้ว — ยืนยันจากภาคสนามว่า v3.78 ตอบสนองดีกว่าชัดเจน
+- **ทำอะไร:** revert โมเดล WiFi/MQTT servicing กลับเป็น **v3.78 เป๊ะ** (`taskWifiMqtt` เดิม, `gNetMutex` recursive เดิม, keepAlive 60s, backoff/port เดิม) แล้ว **เติมกลับเฉพาะฟีเจอร์ HTTP revenue** จาก v3.79
+- **ตัดออกจาก v3.79 (เพราะแตะ MQTT servicing):**
+  - เอา `netLockTryEnter()` helper ออก
+  - เอา pump `mqclient.loop()` ต้นรอบ `taskWifiMqtt` ออก → cadence keepalive กลับเท่า v3.78
+- **เก็บไว้ (HTTP revenue ล้วน):** `sendRevenueHttp()` + `txnId` idempotent, persist `pendingBalance/sendAmt/sendTxn/txnSeq` ลง NVS `revenue`, `revenueRestore()` ตอน boot, throttle 4s, endpoint `POST /public/machines/device-revenue` (backend เดิม)
+- ไฟล์: `src/main.cpp`, `src/varable.h`
+- เครื่องเดิมที่ยังส่งรายรับผ่าน MQTT ไม่กระทบ (backend รองรับทั้งสองทาง)
+
+### Rollback
+
+- ย้อนไป: **Version 3.78** — `git checkout f34a4f2 -- src/main.cpp src/main.h src/varable.h`
+- หรือย้อนไป **v3.79** (มี pump/tryEnter) = `ff3ed1e`
+
+---
+
 ## Version 3.79 (2026-07-06)
 
 ### รายรับส่งทาง HTTP (idempotent) แทน MQTT postSQL + กัน MQTT flap ทำ loop() ขาด
