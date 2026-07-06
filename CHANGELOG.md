@@ -26,10 +26,20 @@
 
 ### Rollback
 
-- ย้อนไป: **Version 3.78** (git `f34a4f2` / ATD35 `4c0b028`)
-- โปรเจกต์คู่: ย้อน **ATD_TM** และ **ATD35** ไปเลขเดียวกัน
-- ไฟล์ที่ต้องคืน: `src/main.cpp`, `src/varable.h`; Backend คืน `device-revenue` endpoint + idempotency (revert commit)
-- หมายเหตุ: NVS namespace `revenue` บนเครื่องจริงไม่ต้องล้าง (คีย์ใหม่ ไม่กระทบ config)
+> **บันทึกสำคัญ:** ถ้า v3.79 ใช้งานไม่ดี **ย้อนกลับไป v3.78 ได้ทันที** — ทุก repo push v3.78 ไว้เป็นจุดย้อนกลับแล้ว
+
+- ย้อนไป: **Version 3.78**
+- Commit อ้างอิง:
+
+  | Repo | v3.79 (ปัจจุบัน) | v3.78 (จุดย้อนกลับ) |
+  |---|---|---|
+  | ATD_TM | `ff3ed1e` | `f34a4f2` |
+  | ATD35 | `c4cecc4` | `4c0b028` |
+  | MelodyWebapp (backend) | `1d7c1f1` | `34b6f21` |
+
+- วิธีย้อน (ต่อ repo): `git revert <v3.79 commit>` (ปลอดภัย เก็บประวัติ) หรือ `git checkout f34a4f2 -- src/main.cpp src/varable.h` แล้ว build/OTA เวอร์ชัน 3.78
+- โปรเจกต์คู่: ย้อน **ATD_TM** และ **ATD35** ไปเลขเดียวกัน + revert backend ด้วย (endpoint `device-revenue` เป็น additive — ถ้าย้อน firmware อย่างเดียว backend เก่ายังรับ MQTT postSQL ได้ ไม่จำเป็นต้อง revert backend)
+- หมายเหตุ: NVS namespace `revenue` บนเครื่องจริงไม่ต้องล้าง (คีย์ใหม่ ไม่กระทบ config); firmware 3.78 จะกลับไปส่งรายรับทาง MQTT postSQL เหมือนเดิม
 
 ---
 
