@@ -85,7 +85,7 @@ int ldrMinus = 500;
 int mqtt_port1 = 4741; // broker หลัก Melody (4741) — ลอง 4742–4744 เมื่อ fail
 
 // fw info (old)
-const char *fwversion[] = {"Current Firmware\r\n", "Version 3.78\r\n"};
+const char *fwversion[] = {"Current Firmware\r\n", "Version 3.79\r\n"};
 // const char *fwversion[] = {"Current Firmware\r\n", "Version 9.99\r\n"};
 
 #elif OldBoard == 0
@@ -153,7 +153,7 @@ int ldrMinus = 1000;
 int mqtt_port1 = 4741; // เลข port
 
 // fw info (new)
-const char *fwversion[] = {"Current Firmware\r\n", "Version 3.78\r\n"};
+const char *fwversion[] = {"Current Firmware\r\n", "Version 3.79\r\n"};
 // const char *fwversion[] = {"Current Firmware\r\n", "Version 3.00\r\n"};
 
 #endif
@@ -185,7 +185,11 @@ int price[] = {30, 40, 50};
 int pricePro[] = {40, 50, 60};
 int PriceShow[] = {30, 40, 50};
 int item_price = 0;
-int pendingBalance = 0;   // ยอดรายรับที่ยังส่งขึ้นเซิร์ฟเวอร์ไม่สำเร็จ
+int pendingBalance = 0;   // ยอดรายรับที่ยังส่งขึ้นเซิร์ฟเวอร์ไม่สำเร็จ (buffer สะสม)
+// รายรับส่งทาง HTTP แบบ idempotent — batch ที่กำลังส่ง (freeze amount+txnId ตอนเริ่มส่ง)
+int revSendingAmount = 0; // ยอดของ batch ที่ freeze ไว้ส่ง (0 = ยังไม่ freeze)
+String revSendingTxn = ""; // txnId ของ batch ที่กำลังส่ง (idempotency key)
+unsigned long revTxnSeq = 0; // ตัวนับ txn ต่อเครื่อง (persistent) เพื่อสร้าง txnId ไม่ซ้ำ
 
 // โปรโมชั่นแบบหลายช่วงเวลา/หลายวัน
 struct PromoSlot {
@@ -307,6 +311,8 @@ String Path_OTI = "/ota/download";
 String Path_MqttReport = "/public/machines/mqtt-report";
 String Path_DeviceAck = "/public/machines/device-ack";
 String Path_UpdateState = "/public/machines/update-state";
+/** รายรับทาง HTTP (แทน MQTT postSQL) — idempotent ด้วย txnId กันซ้ำตอน retry */
+String Path_DeviceRevenue = "/public/machines/device-revenue";
 String api_key = "cf860590807a21db3be15ae3f99f706b";
 String server = "backend.ma-well.com"; // Melody OTA (Cloudflare → backend)
 String host = server;

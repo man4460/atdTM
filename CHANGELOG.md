@@ -6,6 +6,33 @@
 
 ---
 
+## Version 3.79 (2026-07-06)
+
+### รายรับส่งทาง HTTP (idempotent) แทน MQTT postSQL + กัน MQTT flap ทำ loop() ขาด
+
+- **อาการ:** เครื่องออนไลน์/ออฟไลน์ตลอด — MQTT `dropped rc=-4 wifi=3 rssi=-51` วนซ้ำ (RSSI ดี, connect สำเร็จทุกครั้ง = ping timeout ไม่ใช่สัญญาณ) → รายรับที่ส่งผ่าน MQTT `postSQL` (QoS0) เสี่ยงหายตอนหลุด และ HTTP fallback เดิมไม่เคยทำงานเพราะ connect สำเร็จ (streak ไม่ถึง 20)
+- **A — รายรับผ่าน HTTP:**
+  - Backend: เพิ่ม `POST /public/machines/device-revenue` (auth ด้วย device api_key เดียวกับ update-state) — reuse core `recordDeviceRevenue()` (dedup ±window เดิม) + **idempotency key `txnId`** (เก็บใน `description = "txn:<id>"`) กันรายรับซ้ำเวลา ESP retry
+  - Firmware: รายรับส่ง HTTP เป็นหลัก (`sendRevenueHttp`) buffer+retry จนได้ 2xx, แนบ `txnId` (persistent `<Noserial>-<seq>`), persist `pendingBalance/sendAmt/sendTxn/txnSeq` ลง NVS namespace `revenue` (กู้หลัง reboot) — เลิกใช้ MQTT postSQL/UpdateBalanceV3(Azure) สำหรับรายรับ
+- **B — กัน flap แย่ลง (ไม่แตะ keepAlive/socketTimeout/port ตาม regression-guard):**
+  - throttle การส่งรายรับ HTTP ทุก 4s (กันถือ net lock ถี่จน `mqclient.loop()` ขาด)
+  - pump `mqclient.loop()` ต้นรอบ `taskWifiMqtt` ด้วย `netLockTryEnter(30ms)` (lock สั้น) — รับประกัน cadence keepalive/อ่าน PINGRESP
+- ไฟล์: `src/main.cpp`, `src/varable.h`; Backend: `mqtt.service.ts`, `public-api.controller.ts`, `dto/public-device-revenue.dto.ts`
+- **ต้อง deploy backend คู่กัน** (endpoint ใหม่) — ถ้ายังไม่ deploy backend ESP จะ retry รายรับค้างไว้ (ไม่หาย)
+
+### หมายเหตุ B (ยังเปิด)
+
+- root cause `rc=-4` ตอน idle (broker `mawell.thddns.net` DDNS/NAT) ยังไม่ปิดสนิท — A ทำให้รายรับปลอดภัยแม้ flap; ถ้าต้องการปิด flap 100% ต้องเก็บ timing log (connect→drop) หรือดูฝั่ง broker/NAT
+
+### Rollback
+
+- ย้อนไป: **Version 3.78** (git `f34a4f2` / ATD35 `4c0b028`)
+- โปรเจกต์คู่: ย้อน **ATD_TM** และ **ATD35** ไปเลขเดียวกัน
+- ไฟล์ที่ต้องคืน: `src/main.cpp`, `src/varable.h`; Backend คืน `device-revenue` endpoint + idempotency (revert commit)
+- หมายเหตุ: NVS namespace `revenue` บนเครื่องจริงไม่ต้องล้าง (คีย์ใหม่ ไม่กระทบ config)
+
+---
+
 ## Version 3.78 (2026-07-05)
 
 ### Mode 3/4 hier — จังหวะเปลี่ยนรีเลย์สม่ำเสมอ (อ่าน LDR แบบ blocking)

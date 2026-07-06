@@ -1,13 +1,20 @@
 # Stability Notes — ATD_TM_V3_New_Hier
 
-อัปเดตล่าสุด: `Version 3.60`
+อัปเดตล่าสุด: `Version 3.79`
+
+## v3.79 — รายรับ HTTP idempotent + กัน MQTT flap ทำ loop() ขาด
+
+- **รายรับส่ง HTTP เป็นหลัก** (`POST /public/machines/device-revenue`) แทน MQTT `postSQL` — ไม่หายแม้ MQTT flap
+  - **idempotency key `txnId`** (`<Noserial>-<seq>`, persistent) — backend เก็บ `description="txn:<id>"` → retry ปลอดภัย ไม่เกิดรายรับซ้ำ (สำคัญ: เคยมีเคสรายรับซ้ำ 23,979 แถว)
+  - persist `pendingBalance/sendAmt/sendTxn/txnSeq` ลง NVS namespace `revenue` → กู้ยอดค้างหลัง reboot
+  - freeze batch (amount+txnId) ตอนเริ่มส่ง; coin ที่หยอดเพิ่มระหว่างส่งไป batch ถัดไป (txn ใหม่)
+- **กัน flap:** throttle ส่งรายรับ HTTP ทุก 4s + pump `mqclient.loop()` ต้นรอบด้วย `netLockTryEnter(30ms)` — ไม่แตะ keepAlive(60)/socketTimeout(15)/port ตาม regression-guard
+- **ยังเปิด:** root cause `rc=-4` idle (broker DDNS/NAT) — A ทำให้รายรับปลอดภัย แต่ presence ยังอาจ flap; ต้องเก็บ timing log connect→drop เพื่อปิดสนิท
 
 ## สิ่งที่ harden แล้ว
 
 - กัน `HTTP + MQTT` ใช้ lwIP พร้อมกันด้วย `gNetMutex`
-- ตอนส่ง `pendingBalance`
-  - MQTT ออนไลน์: ส่ง `postSQL` ทาง MQTT อย่างเดียว
-  - MQTT ล่มจริง: ค่อย fallback เป็น HTTP
+- ตอนส่ง `pendingBalance` (v3.79): ส่งทาง **HTTP idempotent** (buffer+retry จน 2xx) — เลิกใช้ MQTT postSQL/UpdateBalanceV3
 - เพิ่ม `wifiLinkUsable()` รอ WiFi stable **2s** (standby) / **1s** (เครื่องทำงาน) ก่อน MQTT — v3.58 ลดจาก 4s
 - **v3.58 WiFi hysteresis 2.5s:** อย่าตัด MQTT ทันทีเมื่อ WiFi กระพริบ; pump keepalive ระหว่างรอ
 - **v3.58 mqtt port:** หมุน 4741–4744 เฉพาะตอน connect **fail** (ไม่ ++ ทุกครั้ง)
