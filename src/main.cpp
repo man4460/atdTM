@@ -2654,28 +2654,20 @@ void SetFirstHier()
 {
   static int count_check_power = 0;
   static int count_check_power2 = 0;
-  static LdrAvgSampler ldrSampler;
-  static bool sampling = false;
   static unsigned long lastActionMs = 0;
-  static const unsigned long actionGapMs = 500;
+  // Mode 3/4 (hier): หน่วงสั้นระหว่างรอบ — เดินเร็วขึ้น (เดิม 500ms)
+  const unsigned long actionGapMs = 100;
 
   unsigned long now = millis();
-  if (!sampling && (now - lastActionMs) < actionGapMs) {
+  if ((now - lastActionMs) < actionGapMs) {
     return;
   }
-
-  int val = 0;
-  if (!sampling) {
-    ldrSampler.begin(LDR2_PIN);
-    sampling = true;
-    return;
-  }
-  if (!ldrSampler.tick(&val)) {
-    return;
-  }
-  sampling = false;
   lastActionMs = now;
-  printLdrSummary("SetFirstHier check power", LDR2_PIN, val);
+
+  // อ่าน LDR แบบ blocking สั้น (~2ms, 4 ค่า median) ในครั้งเดียว
+  // เดิมใช้ LdrAvgSampler กระจายเก็บค่าข้าม loop หลายรอบ -> จังหวะเปลี่ยนรีเลย์ไม่สม่ำเสมอ
+  // เพราะขึ้นกับ scheduler/งานอื่นใน taskProgram; อ่านครั้งเดียวให้จังหวะคงที่ (Jok() ยัง yield ปกติ)
+  int val = readLDRAverage(LDR2_PIN, 4, "SetFirstHier check power");
 
   if (OldBoard == 1)
   { // old board

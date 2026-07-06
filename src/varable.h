@@ -85,7 +85,7 @@ int ldrMinus = 500;
 int mqtt_port1 = 4741; // broker หลัก Melody (4741) — ลอง 4742–4744 เมื่อ fail
 
 // fw info (old)
-const char *fwversion[] = {"Current Firmware\r\n", "Version 3.76\r\n"};
+const char *fwversion[] = {"Current Firmware\r\n", "Version 3.78\r\n"};
 // const char *fwversion[] = {"Current Firmware\r\n", "Version 9.99\r\n"};
 
 #elif OldBoard == 0
@@ -153,7 +153,7 @@ int ldrMinus = 1000;
 int mqtt_port1 = 4741; // เลข port
 
 // fw info (new)
-const char *fwversion[] = {"Current Firmware\r\n", "Version 3.76\r\n"};
+const char *fwversion[] = {"Current Firmware\r\n", "Version 3.78\r\n"};
 // const char *fwversion[] = {"Current Firmware\r\n", "Version 3.00\r\n"};
 
 #endif

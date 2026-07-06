@@ -6,6 +6,40 @@
 
 ---
 
+## Version 3.78 (2026-07-05)
+
+### Mode 3/4 hier — จังหวะเปลี่ยนรีเลย์สม่ำเสมอ (อ่าน LDR แบบ blocking)
+
+- **อาการ (3.77):** บางครั้งรอนานกว่าจะเปลี่ยนรีเลย์ จังหวะไม่เท่ากัน
+- **สาเหตุ:** `SetFirstHier()` ใช้ `LdrAvgSampler` เก็บค่ากระจายข้าม loop หลายรอบ → เวลาระหว่าง "เริ่มอ่าน → ครบ → ขยับรีเลย์" ขึ้นกับ scheduler + งานอื่นใน taskProgram (ไม่คงที่)
+- **แก้:** อ่าน LDR ครั้งเดียวแบบ blocking สั้น `readLDRAverage(LDR2_PIN, 4)` (~2ms, median 4 ค่า) → จังหวะคงที่ที่ ~Jok() (900ms) ซึ่ง deterministic; `Jok()` ยัง `vTaskDelay` yield ให้ task อื่นปกติ (ไม่กระทบ MQTT/WiFi คนละ task)
+- ไฟล์: `src/main.cpp` (`SetFirstHier`)
+
+### Rollback
+
+- ย้อนไป: **Version 3.77** (sampler 4 ค่า) หรือ 3.76 (sampler 10 ค่า + gap 500)
+- ไฟล์: `src/main.cpp`, `src/varable.h`
+
+---
+
+## Version 3.77 (2026-07-05)
+
+### Mode 3/4 (hier) เดินเร็วขึ้น — ลดหน่วงรอบเช็ก power ใน SetFirstHier()
+
+- **อาการ:** โหมด 3/4 เช็ค LDR + ขยับ jok วนจนไฟสว่าง เดินช้า
+- **แก้ (TM only, SetFirstHier ถูกเรียกเฉพาะ Mode 3/4):**
+  - `actionGapMs` 500 → **100 ms**
+  - LDR sampler 10 ค่า → **4 ค่า** (~16ms แทน ~100ms) ยังกรอง spike ด้วย median
+- คงไว้: Jok()/JokBack() half-toggle เดิม, count_check_power 15, error ที่ count2 5
+- ไฟล์: `src/main.cpp`
+
+### Rollback
+
+- ย้อนไป: **Version 3.76** (actionGap 500, sampler 10 ค่า)
+- ไฟล์: `src/main.cpp`, `src/varable.h`
+
+---
+
 ## Version 3.76 (2026-07-04)
 
 ### แก้ crash `pbuf_free: p->ref > 0` (recv ซ้อนข้าม task) + คืน keepAlive 60
