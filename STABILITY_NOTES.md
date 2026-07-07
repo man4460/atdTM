@@ -1,6 +1,23 @@
 # Stability Notes — ATD_TM_V3_New_Hier
 
-อัปเดตล่าสุด: `Version 3.79`
+อัปเดตล่าสุด: `Version 3.88` (TM only — loop serviceNetwork)
+
+## v3.88 TM — ย้อน network กลับ loop()
+
+- WiFi/MQTT/HTTP ใน `serviceNetwork()` เรียกจาก `loop()` — ไม่มี `taskWifiMqtt`
+- `mqclient.loop()` ทุกลูปเมื่อ WiFi associated (single-thread, no mutex)
+- **ข้อควรระวัง:** v3.84 พิสูจน์แล้วว่าโมเดลนี้ MQTT คำสั่งอาจตอบช้า — ย้อนเพราะ user ขอ
+
+## v3.86 — MQTT reconnect 5-5-5-5
+
+- หลุด edge: ลอง connect ทันที (reset `lastReconnectAttempt`)
+- connect fail: retry ทุก 5s คงที่ (ไม่ backoff 10/15s) — ครบ 4 fail ค่อยหมุน port 4741–4744
+- ยังคง keepAlive(60) / socketTimeout(15) ตาม regression-guard
+
+## v3.85 — Serial log วินิจฉัย MQTT
+
+- `mqttPumpLoopLocked` log ทุก 30s (tag/rounds/total + uptime + RTC) — ดูว่า loop ยัง pump อยู่หรือ starve
+- `logMqttDropped(reason)` ตอนหลุด: `edge` (broker), `wifi_down`, `graceful_offline` + rc/WiFi/RSSI/failStreak
 
 ## v3.79 — รายรับ HTTP idempotent + กัน MQTT flap ทำ loop() ขาด
 

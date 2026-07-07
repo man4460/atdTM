@@ -29,7 +29,6 @@ void commandApp();
 
 void SetTimerSend();
 void SetStatusControl();
-bool UpdateBalanceV3(int amount);
 
 void CheckPromotion();
 

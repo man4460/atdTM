@@ -6,6 +6,104 @@
 
 ---
 
+## Version 3.91 (2026-07-07) — Melody protocol v4 (mv:4 + WSS) — TM + ATD35
+
+### Melody v4 — แยก transport จาก v1–v3
+
+- `MELODY_PROTOCOL_VERSION 4` + presence `mv:4`, `transport:wss` เมื่อ `MQTT_USE_WEBSOCKET`
+- v4 = คำสั่ง/payload เหมือน v3 แต่ MQTT over WSS (Cloudflare)
+- ไฟล์: `src/main.cpp`, `src/varable.h`
+
+### Rollback
+
+- ตั้ง `MQTT_USE_WEBSOCKET 0`, `mv:3` หรือย้อน **3.90**
+
+---
+
+## Version 3.90 (2026-07-07) — TM only
+
+### WSS ผ่าน Cloudflare `melodymqtt.ma-well.com` → Mosquitto WS :9001
+
+- `MQTT_USE_WEBSOCKET 1` ใน `varable.h` — ใช้ `WebSocketsClient` + `PubSubClient` แทน TCP
+- Cloudflare: `wss://melodymqtt.ma-well.com:443/` + subprotocol `mqtt`
+- ทดสอบ LAN ตรง PC: `MQTT_WS_USE_SSL 0`, `mqtt_ws_host` = IP PC, `mqtt_ws_port` = 9001
+- lib: `links2004/WebSockets` ใน `platformio.ini`
+- ไฟล์: `src/main.cpp`, `src/varable.h`, `platformio.ini`
+- **ATD35 ไม่เปลี่ยน**
+
+### Rollback
+
+- ตั้ง `MQTT_USE_WEBSOCKET 0` หรือย้อนไป **Version 3.88**
+
+---
+
+## Version 3.88 (2026-07-07) — TM only
+
+### ย้อนโมเดล WiFi/MQTT กลับ `loop()` — `serviceNetwork()` เธรดเดียว (จาก stash v3.83)
+
+- **ทำไม:** ต้องการโมเดลเดิมที่ WiFi + `mqclient.loop()` รันใน **`loop()`** ไม่ผ่าน `taskWifiMqtt`
+- **โมเดล:** `loop()` → `serviceNetwork()` ทุกลูป; `mqclient.loop()` ไม่ถูก mutex บล็อก; ไม่สร้าง `taskWifiMqtt`
+- **คงจาก v3.83:** keepAlive 60s, revenue HTTP, backoff reconnect 5-5-10-10, `SET_LOOP_TASK_STACK_SIZE(16KB)`
+- **ตัดออกจาก v3.84–3.87:** `taskWifiMqtt`, diagnostic log v3.85, reconnect 5-5-5-5 v3.86, Uptime topic v3.87
+- ไฟล์: `src/main.cpp`, `src/main.h`, `src/varable.h`
+- **ATD35 ไม่เปลี่ยน** — ยังใช้ `taskWifiMqtt` ตามเดิม
+
+### Rollback
+
+- ย้อนไป: **Version 3.84** — `git checkout ac7deda -- src/main.cpp src/main.h src/varable.h`
+- หรือกลับ **taskWifiMqtt + log v3.87** จาก working tree ก่อนย้อน
+
+---
+
+## Version 3.87 (2026-07-07)
+
+### MQTT Uptime + log UpdateState (Melody legacy sync)
+
+- ส่ง **Uptime** คู่กับ UpdateState (`{ID, Title, Time}`) — ระบบเก่าใช้ topic นี้อัปเดตนับถอยหลัง
+- log `[MQTT] UpdateState ->` / `[MQTT] Uptime ->` หลัง publish สำเร็จ
+- ไฟล์: `src/main.cpp`, `src/varable.h`
+
+### Rollback
+
+- ย้อนไป: **Version 3.86**
+- โปรเจกต์คู่: ย้อน **ATD_TM** และ **ATD35** ไปเลขเวอร์ชันเดียวกัน
+
+---
+
+## Version 3.86 (2026-07-07)
+
+### MQTT reconnect เร็วขึ้น — 5-5-5-5 วินาทีคงที่ก่อนหมุนพอร์ต
+
+- **หลุด (edge):** reset timer → ลอง `connect` ทันทีรอบถัดไป (ไม่รอ 5s แรก)
+- **connect fail:** retry ทุก **5s คงที่** (ตัด backoff 5→10→15) — fail ครบ **4 ครั้ง** ค่อย `mqtt_port1++` (4741–4744)
+- log: `CONNECT_FAIL ... retry in 5s fail x/4`, `ROTATE port ->`
+- ไฟล์: `src/main.cpp`, `src/varable.h`
+
+### Rollback
+
+- ย้อนไป: **Version 3.85**
+- โปรเจกต์คู่: ย้อน **ATD_TM** และ **ATD35** ไปเลขเวอร์ชันเดียวกัน
+- ไฟล์ที่ต้องคืน: `src/main.cpp`, `src/varable.h`
+
+---
+
+## Version 3.85 (2026-07-07)
+
+### Serial log วินิจฉัย MQTT loop + หลุด (uptime + RTC)
+
+- **`mqttPumpLoopLocked()`** — log ทุก 30s: `tag`, `rounds`, `total` pump count + `up=...s rtc=HH:MM:SS`
+- **`logMqttDropped(reason)`** — log ตอนหลุดพร้อม `rc`, WiFi, RSSI, `failStreak` (reason: `edge` / `wifi_down` / `graceful_offline`)
+- **connect สำเร็จ** — log พร้อม uptime + RTC
+- ไฟล์: `src/main.cpp`, `src/varable.h`
+
+### Rollback
+
+- ย้อนไป: **Version 3.84**
+- โปรเจกต์คู่: ย้อน **ATD_TM** และ **ATD35** ไปเลขเวอร์ชันเดียวกัน
+- ไฟล์ที่ต้องคืน: `src/main.cpp`, `src/varable.h`
+
+---
+
 ## Version 3.84 (2026-07-07)
 
 ### กลับไปโมเดลเน็ต v3.78 (ตอบสนองดี) + เก็บเฉพาะ HTTP revenue
