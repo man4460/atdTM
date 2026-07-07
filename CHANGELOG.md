@@ -6,6 +6,21 @@
 
 ---
 
+## Version 3.92 (2026-07-07) — OTA โฟลเดอร์ v4 WSS
+
+### แยก OTA folder สำหรับ Melody v4 (MQTT_USE_WEBSOCKET)
+
+- OldBoard 1 → `userID = wss_old` → `fw/wss_old/`
+- OldBoard 0 → `userID = wss_new` → `fw/wss_new/`
+- TCP เก่า (MQTT_USE_WEBSOCKET 0) ยังใช้ `ai_old` / `ai_new`
+- ไฟล์: `src/varable.h`
+
+### Rollback
+
+- ย้อน **3.91** หรือตั้ง `MQTT_USE_WEBSOCKET 0`
+
+---
+
 ## Version 3.91 (2026-07-07) — Melody protocol v4 (mv:4 + WSS) — TM + ATD35
 
 ### Melody v4 — แยก transport จาก v1–v3

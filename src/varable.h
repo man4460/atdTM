@@ -1,7 +1,8 @@
 // Unified variables for old/new board.
 // เลือกบอร์ดด้วย OldBoard ตัวเดียว:
-//  - OldBoard == 1 : บอร์ดเก่า (OTA ai_old)
-//  - OldBoard == 0 : บอร์ดใหม่ (OTA ai_new)
+//  - OldBoard == 1 : บอร์ดเก่า
+//  - OldBoard == 0 : บอร์ดใหม่
+// OTA: MQTT_USE_WEBSOCKET 0 → ai_old / ai_new | 1 → wss_old / wss_new (Melody v4)
 
 #pragma once
 
@@ -14,7 +15,7 @@
 // --- 1) บอร์ด & เวอร์ชัน firmware ---
 #define OldBoard 1 // 0 = บอร์ดใหม่ (ai_new) | 1 = บอร์ดเก่า (ai_old)
 
-const char *fwversion[] = {"Current Firmware\r\n", "Version 3.91\r\n"};
+const char *fwversion[] = {"Current Firmware\r\n", "Version 3.92\r\n"};
 
 // --- 2) ตัวเครื่อง / Melody (ต้องตรงกับหน้าแก้ไขเครื่องในเว็บ) ---
 int gid = 99;
@@ -23,10 +24,22 @@ String IDserver = "94"; // SharePoint list item ID
 int CodeMachine = 0;
 int Mode = 2;
 
+// --- 4) MQTT — v4 WSS (Melody machines.version=4) หรือ TCP เก่า (v1–v3) ---
+#define MELODY_PROTOCOL_VERSION 4
+#define MQTT_USE_WEBSOCKET 1 // 1 = WSS | 0 = TCP mawell.thddns.net:4741–4744
+
+#if MQTT_USE_WEBSOCKET
+#if OldBoard == 1
+String userID = "wss_old"; // OTA → fw/wss_old/
+#else
+String userID = "wss_new"; // OTA → fw/wss_new/
+#endif
+#else
 #if OldBoard == 1
 String userID = "ai_old"; // OTA → fw/ai_old/
 #else
 String userID = "ai_new"; // OTA → fw/ai_new/
+#endif
 #endif
 
 // --- 3) WiFi เริ่มต้น (แก้ได้จาก Melody config ภายหลัง) ---
@@ -35,9 +48,7 @@ String passStr = "0815418771";
 // String ssidStr = "man4460base_2.4G";
 // String passStr = "Man0815418771";
 
-// --- 4) MQTT — v4 WSS (Melody machines.version=4) หรือ TCP เก่า (v1–v3) ---
-#define MELODY_PROTOCOL_VERSION 4
-#define MQTT_USE_WEBSOCKET 1 // 1 = WSS | 0 = TCP mawell.thddns.net:4741–4744
+
 
 #if MQTT_USE_WEBSOCKET
 // WSS ผ่าน Cloudflare
