@@ -448,6 +448,20 @@ void writePreferences()
   preferences.end(); // ปิด Preferences
 }
 
+/** Melody เวลาโปรแกรม (timedry1–3 / duration1–3) → timerDry + TimeCountdown ซัก P1–P3 */
+static void applyMelodyProgramDurations(int d1, int d2, int d3) {
+  if (d1 < 1 || d2 < 1 || d3 < 1) return;
+  timerDry[0] = d1;
+  timerDry[1] = d2;
+  timerDry[2] = d3;
+  TimeCountdown1[0] = 0;
+  TimeCountdown1[1] = d1;
+  TimeCountdown2[0] = 0;
+  TimeCountdown2[1] = d2;
+  TimeCountdown3[0] = 0;
+  TimeCountdown3[1] = d3;
+}
+
 /** ตั้งค่าตัวแปร config เป็นค่าจากโรงงาน (เทียบเท่า varable.h) แล้วบันทึก — ใช้เมื่อขอ config ทาง MQTT แล้วไม่มีข้อมูล */
 void applyFactoryDefaultsConfig() {
   price[0] = 30; price[1] = 40; price[2] = 50;
@@ -462,15 +476,14 @@ void applyFactoryDefaultsConfig() {
   drum[0] = 7; drum[1] = 0; drum[2] = 0;
   check_runing_time[0] = 21; check_runing_time[1] = 13; check_runing_time[2] = 5;
   TimeCountdowndrum[0] = 2; TimeCountdowndrum[1] = 7;
-  TimeCountdown1[0] = 0; TimeCountdown1[1] = 31;
-  TimeCountdown2[0] = 0; TimeCountdown2[1] = 31;
-  TimeCountdown3[0] = 0; TimeCountdown3[1] = 31;
+  applyMelodyProgramDurations(timerDry[0], timerDry[1], timerDry[2]);
   promoSlotCount = 0;
   coinValue = 10;
   mqttStatus = 1;
   Mode = 1;
   CodeMachine = 1;
   setRelayType();
+  applyMelodyProgramDurations(timerDry[0], timerDry[1], timerDry[2]);
   writePreferences();
   setPriceShow();
   Serial.println("✅ ใช้ค่าจากโรงงาน (ไม่มี config จากระบบ)");
@@ -1477,7 +1490,6 @@ void machineRuning()
             }
             if (count_minn_pass == 15)
             {
-              display.setSegments(SEG_01);
               reportEspFaultToMelody("01");
             }
             else if (count_minn_pass >= 20)
@@ -1508,7 +1520,10 @@ void machineRuning()
       }
 
       static bool dot = false;
-      if (!dot)
+      if (count_minn_pass >= 15) {
+        display.setSegments(SEG_01);  // fault 01: ค้าง -01- จนครบ 20 นาที (เวลายังนับต่อใน RAM)
+      }
+      else if (!dot)
       {
         display.showNumberDecEx(hrs, 0b11100000, true, 2, 0);
         display.showNumberDec(minn, true, 2, 2);
@@ -1788,6 +1803,7 @@ static bool bootMelodyPromoPending = false;
 static String bootMelodyPromoPayload;
 static int bootMelodyConfigCount = 0;
 static const unsigned long BOOT_MELODY_SYNC_DEBOUNCE_MS = 2500UL;
+static bool g_melodyDeferPrefsSave = false;
 
 static bool bootMelodySyncQuietReady()
 {
@@ -1796,6 +1812,45 @@ static bool bootMelodySyncQuietReady()
 }
 
 static void applyPromoSlotsPayload(const String &payloadJson);
+void GetSetupData();
+
+static void commitMelodyPreferencesToNvs()
+{
+  setRelayType();
+  // setRelayType ตั้งโครงสร้างปุ่ม/ดรัม — อย่าให้ทับเวลา P1–P3 จาก Melody (timerDry)
+  applyMelodyProgramDurations(timerDry[0], timerDry[1], timerDry[2]);
+  vTaskDelay(pdMS_TO_TICKS(20));
+  writePreferencesfirst();
+  vTaskDelay(pdMS_TO_TICKS(20));
+  writePreferences();
+  vTaskDelay(pdMS_TO_TICKS(20));
+  setPriceShow();
+  statePriceShow = true;
+}
+
+static void flushBootMelodySyncToNvs()
+{
+  if (!bootMelodyConfigPending && !bootMelodyPromoPending)
+    return;
+
+  g_melodyDeferPrefsSave = true;
+  if (bootMelodyConfigPending)
+  {
+    bootMelodyConfigPending = false;
+    Serial.println(F("[MQTT] ✅ ใช้ configResponse ชุดสุดท้ายจาก Melody"));
+    GetSetupData();
+  }
+  if (bootMelodyPromoPending)
+  {
+    bootMelodyPromoPending = false;
+    Serial.println(F("[MQTT] ✅ ใช้ setPromoSlots ชุดสุดท้ายจาก Melody"));
+    applyPromoSlotsPayload(bootMelodyPromoPayload);
+    bootMelodyPromoPayload = "";
+  }
+  g_melodyDeferPrefsSave = false;
+  Serial.println(F("[MQTT] บันทึก NVS รอบเดียว (config+promo)"));
+  commitMelodyPreferencesToNvs();
+}
 
 static String melodyHttpUrl(const String &path)
 {
@@ -3040,23 +3095,9 @@ void serviceNetwork()
           // ถ้า MQTT ยังไม่ต่อ ยังไม่ล้าง firstGetdata จะรอรอบถัดไปจนกว่า MQTT จะเชื่อมต่อ
         }
 
-        // boot: รอ config/promo ครบ debounce แล้วใช้ชุดสุดท้ายจาก Melody
+        // boot: รอ config/promo ครบ debounce แล้วบันทึก NVS รอบเดียว
         if (isMelodyBootSetupPhase() && bootMelodySyncQuietReady())
-        {
-          if (bootMelodyConfigPending)
-          {
-            bootMelodyConfigPending = false;
-            Serial.println(F("[MQTT] ✅ ใช้ configResponse ชุดสุดท้ายจาก Melody -> GetSetupData()"));
-            GetSetupData();
-          }
-          if (bootMelodyPromoPending)
-          {
-            bootMelodyPromoPending = false;
-            Serial.println(F("[MQTT] ✅ ใช้ setPromoSlots ชุดสุดท้ายจาก Melody"));
-            applyPromoSlotsPayload(bootMelodyPromoPayload);
-            bootMelodyPromoPayload = "";
-          }
-        }
+          flushBootMelodySyncToNvs();
 
         if (stateSetupdata)
         {
@@ -3400,6 +3441,7 @@ void taskProgram(void *parameter)
                   display.setSegments(SEG_DONE);
                   chanel = 10;
                   endProgram = true;
+                  Serial.println("LDR end program done..");
                 }
                 else if (valEnd > ldr_set)
                 {
@@ -3417,6 +3459,7 @@ void taskProgram(void *parameter)
                     display.setSegments(SEG_DONE);
                     chanel = 10;
                     endProgram = true;
+                    Serial.println("LDR end program done..");
                   }
                 }
                 else if (valEnd < ldr_set)
@@ -6119,7 +6162,8 @@ void GetSetupData()
           {
             Serial.println("Edit Serial number for ESP32 => " + newId);
             Noserial = newId;
-            writePreferencesfirst();
+            if (!g_melodyDeferPrefsSave)
+              writePreferencesfirst();
           }
         }
         if (v2.containsKey("gid"))
@@ -6161,11 +6205,6 @@ void GetSetupData()
           pricePro[0] = v2["PricePro1"].as<int>();
           pricePro[1] = v2["PricePro2"].as<int>();
           pricePro[2] = v2["PricePro3"].as<int>();
-        }
-        if (v2.containsKey("timedry1")) {
-          timerDry[0] = v2["timedry1"].as<int>();
-          timerDry[1] = v2["timedry2"].as<int>();
-          timerDry[2] = v2["timedry3"].as<int>();
         }
         if (v2.containsKey("program1[0]"))
         {
@@ -6229,6 +6268,17 @@ void GetSetupData()
           TimeCountdown3[0] = v2["TimeCountdown3[0]"];
           TimeCountdown3[1] = v2["TimeCountdown3[1]"];
         }
+        if (v2.containsKey("timedry1")) {
+          applyMelodyProgramDurations(
+            v2["timedry1"].as<int>(),
+            v2["timedry2"].as<int>(),
+            v2["timedry3"].as<int>());
+        } else if (v2.containsKey("duration1")) {
+          applyMelodyProgramDurations(
+            v2["duration1"].as<int>(),
+            v2["duration2"].as<int>(),
+            v2["duration3"].as<int>());
+        }
         if (v2.containsKey("coinValue")) { int cv = v2["coinValue"].as<int>(); if (cv >= 1) coinValue = cv; }
         if (v2.containsKey("ldr_set")) { int v = v2["ldr_set"].as<int>(); if (v >= 0) ldr_set = v * 100; }
         if (v2.containsKey("pinSlot")) { int v = v2["pinSlot"].as<int>(); if (v == SIG_PIN || v == SIG_PIN2) pinSlot = v; }
@@ -6248,14 +6298,13 @@ void GetSetupData()
           if (p > 0 && p <= 65535) port = p;
           normalizeOtaServer();
         }
-        Serial.println("Setup from MQTT applied, writing preferences.");
-        setRelayType();
-        vTaskDelay(pdMS_TO_TICKS(20));
-        writePreferencesfirst();
-        vTaskDelay(pdMS_TO_TICKS(20));
-        writePreferences();
-        vTaskDelay(pdMS_TO_TICKS(20));
-        setPriceShow();
+        if (!g_melodyDeferPrefsSave)
+        {
+          Serial.println("Setup from MQTT applied, writing preferences.");
+          commitMelodyPreferencesToNvs();
+        }
+        else
+          Serial.println(F("Setup from MQTT applied (defer NVS until boot sync)."));
       }
     }
     return;
@@ -6314,9 +6363,12 @@ static void applyPromoSlotsPayload(const String &payloadJson)
   if (doc.containsKey("Price2")) price[1] = doc["Price2"].as<int>();
   if (doc.containsKey("Price3")) price[2] = doc["Price3"].as<int>();
 
-  writePreferences();
-  setPriceShow();
-  statePriceShow = true;
+  if (!g_melodyDeferPrefsSave)
+  {
+    writePreferences();
+    setPriceShow();
+    statePriceShow = true;
+  }
   Serial.println("Updated promo slots via MQTT, count: " + String(promoSlotCount));
 }
 

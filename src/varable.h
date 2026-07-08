@@ -15,7 +15,7 @@
 // --- 1) บอร์ด & เวอร์ชัน firmware ---
 #define OldBoard 1 // 0 = บอร์ดใหม่ (ai_new) | 1 = บอร์ดเก่า (ai_old)
 
-const char *fwversion[] = {"Current Firmware\r\n", "Version 3.92\r\n"};
+const char *fwversion[] = {"Current Firmware\r\n", "Version 3.97\r\n"};
 
 // --- 2) ตัวเครื่อง / Melody (ต้องตรงกับหน้าแก้ไขเครื่องในเว็บ) ---
 int gid = 99;

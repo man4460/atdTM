@@ -6,6 +6,61 @@
 
 ---
 
+## Version 3.97 (2026-07-08) — กัน setRelayType ทับเวลาโปรแกรมเป็น 31
+
+### TimeCountdown sync
+
+- หลัง `setRelayType()` เรียก `applyMelodyProgramDurations(timerDry…)` อีกครั้งใน `commitMelodyPreferencesToNvs` / factory defaults
+- ซัก P1–P3 ใช้เวลาตาม Melody (`timedry`/`duration`) ไม่ถูกทับกลับเป็น `0:31`
+- ไม่แก้ logic โปรแกรม 4/5/6
+- ไฟล์: `src/main.cpp`, `src/varable.h`
+
+### Rollback
+
+- ย้อน **3.95** (ข้าม 3.96 ที่ ATD35 มีแต่ TM ไม่มี)
+
+---
+
+## Version 3.95 (2026-07-08) — fault 01 จอ TM แสดง -01- ค้าง 15–19 นาที
+
+### machineRuning() — ซักค้าง 0:01
+
+- ครบ 15 นาที: แจ้ง Melody fault 01 + จอ `-01-` ค้าง (ไม่ถูก timer blink ทับ)
+- ครบ 20 นาที: รีเซ็ตโปรแกรมเหมือนเดิม
+- ไฟล์: `src/main.cpp`, `src/varable.h`
+
+### Rollback
+
+- ย้อน **3.94**
+
+---
+
+## Version 3.94 (2026-07-08) — เวลาโปรแกรม Melody → ซัก P1–P3
+
+### sync duration1–3 (timedry1–3) → TimeCountdown1–3
+
+- `applyMelodyProgramDurations()` หลังรับ config MQTT — ซักใช้เวลาเดียวกับอบ (ไม่ค้าง 0:31 จาก ESP config เก่า)
+- ไฟล์: `src/main.cpp`, `src/varable.h`
+
+### Rollback
+
+- ย้อน **3.93**
+
+---
+
+## Version 3.93 (2026-07-08) — boot MQTT sync บันทึก NVS รอบเดียว
+
+### configResponse + setPromoSlots หลัง debounce
+
+- ใช้ config/promo ใน RAM ก่อน แล้ว `writePreferencesfirst` + `writePreferences` ครั้งเดียว
+- ไฟล์: `src/main.cpp`, `src/varable.h`
+
+### Rollback
+
+- ย้อน **3.92**
+
+---
+
 ## Version 3.92 (2026-07-07) — OTA โฟลเดอร์ v4 WSS
 
 ### แยก OTA folder สำหรับ Melody v4 (MQTT_USE_WEBSOCKET)
