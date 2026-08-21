@@ -27,6 +27,8 @@
 
 // Mode 1: โปรไฟล์ LDR (คาบกระพริบ + ระดับ) — เรียนรู้จากเมนูแอดมิน LP1/2/3
 LdrLightProfile ldrLightProfile;
+/** true = ใช้โปรไฟล์ที่เรียน (ถ้ามี) · false = เกณฑ์ ldr_set เดิม — NVS key lpUse */
+bool ldrUseLearned = true;
 
 // v3.82: network รันเธรดเดียวใน loop() (โมเดล V2) — loopTask ต้องมี stack พอสำหรับ HTTP/OTA
 // (เดิม taskWifiMqtt ใช้ 10KB) — ตั้ง 16KB กันล้นตอน OTA
@@ -419,6 +421,7 @@ void writePreferences()
   preferences.putInt("lpDark", ldrLightProfile.darkLevel);
   preferences.putInt("lpOn", ldrLightProfile.onLevel);
   preferences.putInt("lpOff", ldrLightProfile.offLevel);
+  preferences.putBool("lpUse", ldrUseLearned);
   preferences.putInt("StateShutdown", StateShutdown);
   preferences.putInt("SetupData", SetupData);
   yield();  // feed watchdog ขณะเขียน NVS
@@ -649,6 +652,7 @@ void readPreferences()
   ldrLightProfile.darkLevel = preferences.getInt("lpDark", 0);
   ldrLightProfile.onLevel = preferences.getInt("lpOn", 0);
   ldrLightProfile.offLevel = preferences.getInt("lpOff", 0);
+  ldrUseLearned = preferences.getBool("lpUse", true);
   StateShutdown = preferences.getInt("StateShutdown", StateShutdown);
   SetupData = preferences.getInt("SetupData", SetupData);
   pricePro[0] = preferences.getInt("pricePro[0]", pricePro[0]);
@@ -1707,7 +1711,7 @@ static int mqttConnectFailStreak = 0;
 static char configResponseTopicBuf[80];
 /** ห้าม publish/loop ซ้อนใน MQTT callback — คิวไป taskWifiMqtt */
 static bool pendingCommandBackPublish = false;
-static char pendingCommandBackBuf[256];
+static char pendingCommandBackBuf[280];
 static bool pendingLdrSamplePublish = false;
 static char pendingLdrSampleBuf[280];
 static bool pendingPresenceAfterMqttConnect = false;
@@ -2683,8 +2687,8 @@ int checkLightStart(int countStateLight, bool stateWhileRead) {
   int sentReturn = 2; // 0=off, 1=blink/unstable, 2=on
   stateWhile = stateWhileRead;
 
-  // Mode 1 + โปรไฟล์กระพริบที่เรียนรู้แล้ว
-  if (Mode == 1 && ldrLightProfile.valid && stateWhile) {
+  // Mode 1 + โปรไฟล์กระพริบที่เรียนรู้แล้ว (ถ้าเลือกใช้โปรไฟล์)
+  if (Mode == 1 && ldrUseLearned && ldrLightProfile.valid && stateWhile) {
     const int profileRes = checkLightWithProfile(&ldrLightProfile, ldrPin, OldBoard);
     if (profileRes >= 0) {
       sentReturn = profileRes;
@@ -2693,8 +2697,8 @@ int checkLightStart(int countStateLight, bool stateWhileRead) {
     }
   }
 
-  // Mode 6: แค่เปิด/ปิด (ไม่มีกระพริบ) — ใช้ hasOn + hasOff
-  if (Mode == 6 && ldrLightProfile.hasOn && ldrLightProfile.hasOff && stateWhile) {
+  // Mode 6: แค่เปิด/ปิด (ไม่มีกระพริบ) — ใช้ hasOn + hasOff (ถ้าเลือกใช้โปรไฟล์)
+  if (Mode == 6 && ldrUseLearned && ldrLightProfile.hasOn && ldrLightProfile.hasOff && stateWhile) {
     const int onOffRes = checkLightOnOffProfile(&ldrLightProfile, ldrPin);
     if (onOffRes >= 0) {
       sentReturn = onOffRes;
@@ -3586,10 +3590,31 @@ void taskProgram(void *parameter)
             if (endReady) {
               endReady = false;
               printLdrSummary("check ldr end program", (uint8_t)ldrPin, valEnd);
-              if (OldBoard == 1)
-              { // old board
-                if (valEnd < ldr_set - ldrMinus && millis() - step3TimerEndMs >= 3000)
-                {
+              // มีโปรไฟล์เรียน + เลือกใช้: จบเมื่อมืด(ปิด) ค้าง ≥3 วิ | ไม่มืด = ยังทำงาน รีเซ็ตนาฬิกา
+              // ไม่มีโปรไฟล์ / เลือกค่าเดิม: เกณฑ์ ldr_set — fault 01 ที่นาทีท้ายคงเดิม
+              const int profileCls = ldrUseLearned
+                  ? classifyPowerLdrSample(&ldrLightProfile, valEnd, OldBoard)
+                  : -1;
+              bool darkOk = false;
+              if (profileCls >= 0) {
+                darkOk = (profileCls == 0);
+                Serial.print("end LDR profileCls=");
+                Serial.println(profileCls);
+              } else if (OldBoard == 1) {
+                darkOk = (valEnd < ldr_set - ldrMinus);
+              } else {
+                const bool useCm4EndLdr =
+                    (Mode == 1 || Mode == 6 || CodeMachine == 3);
+                const int darkSure = (CodeMachine == 4)
+                                         ? 3500
+                                         : (useCm4EndLdr ? (ldr_set + ldrMinus / 2)
+                                                         : (ldr_set + ldrMinus));
+                darkOk = (CodeMachine == 4) ? (valEnd > darkSure)
+                                            : (valEnd >= darkSure);
+              }
+
+              if (darkOk) {
+                if (millis() - step3TimerEndMs >= 3000) {
                   status_machine_run = false;
                   status_machine_prepare = false;
                   display.setSegments(SEG_DONE);
@@ -3597,43 +3622,9 @@ void taskProgram(void *parameter)
                   endProgram = true;
                   Serial.println("LDR end program done..");
                 }
-                else if (valEnd > ldr_set)
-                {
-                  step3TimerEndMs = millis();
-                }
-              }
-              else
-              {
-                // บอร์ดใหม่
-                // CM4: มืดชัวร์ต้อง >3500 ค้าง 3 วิ | สว่าง <1500 รีเซ็ต | กลางรอ
-                // อื่นๆ: Mode1/6/CM3 ใช้เกณฑ์เดิม
-                const bool useCm4EndLdr =
-                    (Mode == 1 || Mode == 6 || CodeMachine == 3);
-                const int darkSure = (CodeMachine == 4)
-                                         ? 3500
-                                         : (useCm4EndLdr ? (ldr_set + ldrMinus / 2)
-                                                         : (ldr_set + ldrMinus));
-                const int brightSure =
-                    (CodeMachine == 4 || useCm4EndLdr) ? 1500 : ldr_set;
-                const bool darkOk =
-                    (CodeMachine == 4) ? (valEnd > darkSure) : (valEnd >= darkSure);
-
-                if (darkOk)
-                {
-                  if (millis() - step3TimerEndMs >= 3000)
-                  {
-                    status_machine_run = false;
-                    status_machine_prepare = false;
-                    display.setSegments(SEG_DONE);
-                    chanel = 10;
-                    endProgram = true;
-                    Serial.println("LDR end program done..");
-                  }
-                }
-                else if (valEnd < brightSure)
-                {
-                  step3TimerEndMs = millis();
-                }
+              } else {
+                // สว่าง / เทา / ใกล้ระดับเปิด = เครื่องยังทำงาน — รอจนมืดจริง
+                step3TimerEndMs = millis();
               }
               timerstanby = millis();
             }
@@ -3701,27 +3692,47 @@ void taskProgram(void *parameter)
       }
       else
       {
-        if (Mode == 1) {
-          // Mode 1 power: บอร์ดใหม่ <ldr_set ไปต่อ | >ldr_set+500 มืด→Power ซ้ำ | ครบ 5→00
-          // บอร์ดเก่า polarity กลับ: >ldr_set ไปต่อ | <ldr_set-500 มืด→Power ซ้ำ
-          int val = analogRead(ldrPin);
-          const int darkHi = ldr_set + (ldrMinus / 2); // ใหม่: 3500
-          const int darkLo = ldr_set - (ldrMinus / 2); // เก่า: 1000
-          const bool bright =
-              (OldBoard == 1) ? (val > ldr_set) : (val < ldr_set);
-          const bool dark =
-              (OldBoard == 1) ? (val < darkLo) : (val > darkHi);
+        if (Mode == 1 || Mode == 6) {
+          // Power: median หลาย sample แล้วเทียบโปรไฟล์ / ldr_set
+          int val = readLDRAverage(ldrPin);
+          bool bright = false;
+          bool dark = false;
+          bool haveDecision = false;
+          const int profileCls = ldrUseLearned
+              ? classifyPowerLdrSample(&ldrLightProfile, val, OldBoard)
+              : -1;
+          if (profileCls >= 0) {
+            bright = (profileCls == 2);
+            dark = (profileCls == 0);
+            haveDecision = true;
+          } else if (Mode == 1) {
+            // fallback: บอร์ดใหม่ <ldr_set ไปต่อ | >ldr_set+ldrMinus/2 มืด
+            const int darkHi = ldr_set + (ldrMinus / 2);
+            const int darkLo = ldr_set - (ldrMinus / 2);
+            bright = (OldBoard == 1) ? (val > ldr_set) : (val < ldr_set);
+            dark = (OldBoard == 1) ? (val < darkLo) : (val > darkHi);
+            haveDecision = true;
+          }
           static unsigned long lastPowerLdrLogMs = 0;
-          if (lastPowerLdrLogMs == 0 ||
-              (unsigned long)(millis() - lastPowerLdrLogMs) >= 3000) {
+          if (haveDecision &&
+              (lastPowerLdrLogMs == 0 ||
+               (unsigned long)(millis() - lastPowerLdrLogMs) >= 3000)) {
             lastPowerLdrLogMs = millis();
             Serial.print("check ldr power on | LDR pin=");
             Serial.print(ldrPin);
-            Serial.print(" now=");
-            Serial.println(val);
+            Serial.print(" avg=");
+            Serial.print(val);
+            if (profileCls >= 0) {
+              Serial.print(" profileCls=");
+              Serial.print(profileCls);
+            }
+            Serial.println();
           }
-          if (bright) {
-            Serial.print("power check PASS now=");
+          if (!haveDecision) {
+            chanel = 3;
+            count_check_power = 0;
+          } else if (bright) {
+            Serial.print("power check PASS avg=");
             Serial.println(val);
             chanel = 3;
             count_check_power = 0;
@@ -4198,8 +4209,8 @@ void setup()
   
 
   //****************************************************************** */
-  writePreferences();
-  writePreferencesfirst();
+  // writePreferences();
+  // writePreferencesfirst();
   //**************************************************************** */
   setupWaitAdminRestoreFactory();  // กดปุ่ม SETTING = คืนค่าโรงงาน (ก่อนอ่าน Preferences)
   readPreferencesfirst();
@@ -7135,12 +7146,14 @@ void commandApp()
       Serial.print(" on=");
       Serial.print(ldrLightProfile.hasOn ? ldrLightProfile.onLevel : -1);
       Serial.print(" off=");
-      Serial.println(ldrLightProfile.hasOff ? ldrLightProfile.offLevel : -1);
+      Serial.print(ldrLightProfile.hasOff ? ldrLightProfile.offLevel : -1);
+      Serial.print(" lpUse=");
+      Serial.println(ldrUseLearned ? 1 : 0);
       // ตอบกลับ Melody ทาง MQTT
       snprintf(pendingCommandBackBuf, sizeof(pendingCommandBackBuf),
                "{\"cm\":\"ldrProfileStatus\",\"id\":\"%s\",\"value_str1\":\"%d\","
                "\"value_str2\":\"LdrLearnStatus\",\"lpValid\":%d,\"period\":%u,"
-               "\"bright\":%d,\"dark\":%d,\"hasOn\":%d,\"on\":%d,\"hasOff\":%d,\"off\":%d}",
+               "\"bright\":%d,\"dark\":%d,\"hasOn\":%d,\"on\":%d,\"hasOff\":%d,\"off\":%d,\"lpUse\":%d}",
                Noserial.c_str(), gid,
                ldrLightProfile.valid ? 1 : 0,
                (unsigned)ldrLightProfile.periodMs,
@@ -7149,7 +7162,45 @@ void commandApp()
                ldrLightProfile.hasOn ? 1 : 0,
                ldrLightProfile.hasOn ? ldrLightProfile.onLevel : -1,
                ldrLightProfile.hasOff ? 1 : 0,
-               ldrLightProfile.hasOff ? ldrLightProfile.offLevel : -1);
+               ldrLightProfile.hasOff ? ldrLightProfile.offLevel : -1,
+               ldrUseLearned ? 1 : 0);
+      pendingCommandBackPublish = true;
+    }
+    else if (value_str2 == "LdrUseLearn" || value_str2 == "LPUse")
+    {
+      ldrUseLearned = true;
+      writePreferences();
+      const bool haveProfile = ldrLightProfile.valid ||
+                               (ldrLightProfile.hasOn && ldrLightProfile.hasOff);
+      display.setSegments(SEG_LP, 2, 0);
+      display.showNumberDec(1, false, 1, 3);
+      Serial.println("******* LdrUseLearn (use profile) *******");
+      snprintf(pendingCommandBackBuf, sizeof(pendingCommandBackBuf),
+               "{\"cm\":\"ldrLearnResult\",\"id\":\"%s\",\"value_str1\":\"%d\","
+               "\"value_str2\":\"LdrUseLearn\",\"ok\":1,\"lpUse\":1,"
+               "\"lpValid\":%d,\"hasOn\":%d,\"hasOff\":%d,\"msg\":\"%s\"}",
+               Noserial.c_str(), gid,
+               ldrLightProfile.valid ? 1 : 0,
+               ldrLightProfile.hasOn ? 1 : 0,
+               ldrLightProfile.hasOff ? 1 : 0,
+               haveProfile ? "USE LEARN" : "USE LEARN (no profile yet)");
+      pendingCommandBackPublish = true;
+    }
+    else if (value_str2 == "LdrUseDefault" || value_str2 == "LPDefault")
+    {
+      ldrUseLearned = false;
+      writePreferences();
+      display.setSegments(SEG_LP, 2, 0);
+      display.showNumberDec(0, false, 1, 3);
+      Serial.println("******* LdrUseDefault (ldr_set) *******");
+      snprintf(pendingCommandBackBuf, sizeof(pendingCommandBackBuf),
+               "{\"cm\":\"ldrLearnResult\",\"id\":\"%s\",\"value_str1\":\"%d\","
+               "\"value_str2\":\"LdrUseDefault\",\"ok\":1,\"lpUse\":0,"
+               "\"lpValid\":%d,\"hasOn\":%d,\"hasOff\":%d,\"msg\":\"USE DEFAULT\"}",
+               Noserial.c_str(), gid,
+               ldrLightProfile.valid ? 1 : 0,
+               ldrLightProfile.hasOn ? 1 : 0,
+               ldrLightProfile.hasOff ? 1 : 0);
       pendingCommandBackPublish = true;
     }
     else if (value_str2 == "Setup")

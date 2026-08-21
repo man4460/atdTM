@@ -6,6 +6,71 @@
 
 ---
 
+## Version 4.30 (2026-08-21) — สลับแหล่ง LDR: โปรไฟล์ที่เรียน vs ldr_set
+
+### เลือกแหล่งตรวจไฟ
+
+- NVS `lpUse` (default **true** = พฤติกรรมเดิมหลัง OTA)
+- `true` → ใช้โปรไฟล์ที่เรียน (Mode 1 / Mode 6 / Power / จบรอบ)
+- `false` → เกณฑ์ `ldr_set` เดิม — ค่าที่เรียนยังอยู่ใน NVS
+- MQTT: `LdrUseLearn` / `LPUse` · `LdrUseDefault` / `LPDefault`
+- `LdrLearnStatus` ส่ง `lpUse` กลับเว็บด้วย
+- Melody: ปุ่ม «ใช้ค่าที่เรียนรู้» / «ใช้ค่าเดิม (ldr_set)»
+
+### Rollback
+
+- ย้อนไป: **Version 4.29**
+- โปรเจกต์คู่: ย้อน **ATD_TM** และ **ATD35** ไปเลขเดียวกัน
+- ไฟล์ที่ต้องคืน: `src/main.cpp`, `src/varable.h`
+- หมายเหตุ: คีย์ NVS `lpUse` เหลือได้ ไม่กระทบ 4.29
+
+---
+
+## Version 4.29 (2026-08-21) — Step3 จบรอบใช้โปรไฟล์ LDR ที่เรียน
+
+### Step 3 (`check ldr end program`)
+
+- ถ้ามีโปรไฟล์ → `classifyPowerLdrSample`: **มืด(ปิด) ค้าง ≥3 วิ** ถึงจบ; สว่าง/เทา = ยังทำงาน รีเซ็ตนาฬิกา
+- ไม่มีโปรไฟล์ → เกณฑ์ `ldr_set` เดิม
+- fault **01** (ค้างมืดไม่พอตอนนาทีท้าย) คงเดิม
+
+### Rollback
+
+- ย้อนไป: **Version 4.28**
+- โปรเจกต์คู่: ย้อน **ATD_TM** และ **ATD35** ไปเลขเดียวกัน
+
+---
+
+## Version 4.28 (2026-08-21) — Power check อ่าน LDR แบบ median
+
+### Power check
+
+- ใช้ `readLDRAverage()` (median ~10 sample) แทน `analogRead` ครั้งเดียว — ลด false DARK จาก spike 4095
+- Serial: `avg=` แทน `now=`
+
+### Rollback
+
+- ย้อนไป: **Version 4.27**
+- โปรเจกต์คู่: ย้อน **ATD_TM** และ **ATD35** ไปเลขเดียวกัน
+
+---
+
+## Version 4.27 (2026-08-21) — Power check ใช้โปรไฟล์ LDR ที่เรียน
+
+### Power check (`chanel` 2)
+
+- ถ้ามีโปรไฟล์เรียนแล้ว (`hasOn`/`hasOff` หรือ LP1 `valid`) → ใช้ `classifyPowerLdrSample()` แทน `ldr_set`
+- Mode **1** และ **6**
+- ยังไม่มีโปรไฟล์: Mode 1 ใช้ `ldr_set`/`ldrMinus` เหมือนเดิม; Mode 6 ข้ามเช็คเหมือนเดิม
+- Serial: `profileCls=` เมื่อใช้โปรไฟล์ (2=PASS, 0=DARK)
+
+### Rollback
+
+- ย้อนไป: **Version 4.26**
+- โปรเจกต์คู่: ย้อน **ATD_TM** และ **ATD35** ไปเลขเดียวกัน
+
+---
+
 ## Version 4.26 (2026-08-21) — แก้ ANOT Ln/MQ ปุ่มสลับ
 
 ### Anothersetting (TM)
