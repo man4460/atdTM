@@ -6,6 +6,484 @@
 
 ---
 
+## Version 4.26 (2026-08-21) — แก้ ANOT Ln/MQ ปุ่มสลับ
+
+### Anothersetting (TM)
+
+- Mode2=10 (**Ln**): UP/DOWN ปรับ `ldrMinus` (เดิมไปแตะ mqttStatus)
+- Mode2=11 (**MQ**): UP/DOWN ปรับ `mqttStatus` (เดิมไปแตะ ldrMinus)
+- จอและปุ่มตรงกันแล้ว
+
+### Rollback
+
+- ย้อนไป: **Version 4.25**
+- โปรเจกต์คู่: ย้อน **ATD_TM** และ **ATD35** ไปเลขเดียวกัน
+
+---
+
+## Version 4.25 (2026-08-21) — Mode 6 เรียนรู้เปิด/ปิด LDR
+
+### Mode 6
+
+- ใช้โปรไฟล์ `hasOn` + `hasOff` เท่านั้น (ไม่มีกระพริบ)
+- เรียนรู้ด้วย LP2 / LP3 หรือ MQTT `LdrLearnOn` / `LdrLearnOff`
+- `checkLightOnOffProfile()` ใน `ldr_sampler.h`
+
+### Rollback
+
+- ย้อนไป: **Version 4.24**
+- โปรเจกต์คู่: ย้อน **ATD_TM** และ **ATD35** ไปเลขเดียวกัน
+
+---
+
+## Version 4.24 (2026-08-21) — LDR remote max:min + learn result
+
+### LdrOpen stream
+
+- ทุก 1000ms ส่ง `ldrMax` / `ldrMin` (และ `ldr`=max) จากตัวอย่างในรอบนั้น เช่น 4000:500
+
+### LdrLearnBlink / On / Off
+
+- โชว์บนจอ TM (LP1/2/3 + ผล) และ publish `cm=ldrLearnResult` → `commandBack`
+
+### Rollback
+
+- ย้อนไป: **Version 4.23**
+- โปรเจกต์คู่: ย้อน **ATD_TM** และ **ATD35** ไปเลขเดียวกัน
+
+---
+
+## Version 4.23 (2026-08-21) — LPStatus ตอบ MQTT
+
+### LdrLearnStatus / LPStatus
+
+- publish `cm=ldrProfileStatus` → topic **`commandBack`** (lpValid, period, bright, dark, hasOn/on, hasOff/off)
+- ไฟล์: `src/main.cpp`, `src/varable.h`
+
+### Rollback
+
+- ย้อนไป: **Version 4.22**
+- โปรเจกต์คู่: ย้อน **ATD_TM** และ **ATD35** ไปเลขเดียวกัน
+
+---
+
+## Version 4.22 (2026-08-21) — LDR ทางไกลส่งค่าทุก 1000ms
+
+### LdrOpen / LdrOpen2
+
+- เมื่อสั่ง `LdrOpen` ตั้ง `stateLdrOpen` → publish `cm=ldrSample` ไป topic **`commandBack`** ทุก **1000ms**
+- payload: `id`, `ldr`, `pin`, `value_str2=LdrOpen|LdrOpen2`
+- `LdrClose` / `LdrClose2` หยุด stream
+- จอ/Serial ยังอ่าน 100ms (เฉพาะเครื่อง) — ไม่ยิง MQTT ถี่
+- ไฟล์: `src/main.cpp`, `src/varable.h`
+
+### Rollback
+
+- ย้อนไป: **Version 4.21**
+- โปรเจกต์คู่: ย้อน **ATD_TM** และ **ATD35** ไปเลขเดียวกัน
+
+---
+
+## Version 4.21 (2026-08-21) — MQTT เรียนรู้โปรไฟล์ LDR
+
+### cmCommand
+
+- `LdrLearnBlink` / `LP1` — เรียนรู้กระพริบ + Save NVS
+- `LdrLearnOn` / `LP2` — เรียนรู้ไฟติดค้าง + Save
+- `LdrLearnOff` / `LP3` — เรียนรู้ไฟดับ + Save
+- `LdrLearnStatus` / `LPStatus` — ดูสถานะโปรไฟล์
+- ไฟล์: `src/main.cpp`, `src/varable.h`
+
+### Rollback
+
+- ย้อนไป: **Version 4.20**
+- โปรเจกต์คู่: ย้อน **ATD_TM** และ **ATD35** ไปเลขเดียวกัน
+
+---
+
+## Version 4.20 (2026-08-21) — Mode 1 โปรไฟล์ LDR (คาบกระพริบ)
+
+### checkLightStart Mode 1
+
+- เรียนรู้โปรไฟล์: **LP1** กระพริบ (วัด `periodMs` + bright/dark), **LP2** ติดค้าง, **LP3** ดับ
+- ถ้า `ldrLightProfile.valid` → อ่านตามคาบ; มียอดมืดตามโปรไฟล์ ≥2 ครั้ง = BLINK (02)
+- ยังไม่เรียนรู้ → ใช้ logic เดิม (CM4 path / generic)
+- NVS: `lpValid`, `lpPeriod`, `lpBright`, `lpDark`, `lpOn`, `lpOff`
+- TM เมนู Another: Mode2 18–21 (`LP` + 1/2/3 + period/10)
+- ไฟล์: `src/ldr_sampler.h`, `src/main.cpp`, `src/tm1637.h`, `src/varable.h`
+
+### วิธีใช้
+
+1. ตั้งไฟกระพริบ → เมนู LP1 → กด UP (จับ ~4 วิ) → Save
+2. ไฟติดค้าง → LP2 → UP → Save
+3. ไฟดับ → LP3 → UP → Save
+4. Start Mode 1 ทดสอบ 02
+
+### Rollback
+
+- ย้อนไป: **Version 4.19**
+- โปรเจกต์คู่: ย้อน **ATD_TM** และ **ATD35** ไปเลขเดียวกัน
+- หรือลบ NVS key `lpValid` เพื่อปิดโปรไฟล์
+
+---
+
+## Version 4.19 (2026-07-26) — CM4 เกณฑ์กระพริบปรับได้โดยแอดมิน
+
+### cm4_blink_th
+
+- ตัวแปรใหม่ default **1000** — ยอด ≥ ค่านี้ในเช็ค 02 = BLINK
+- แอดมิน TM: เมนู Another → `bL` (Mode2=17) ปรับทีละ 100 (ช่วง 100–4000) แล้ว Save
+- แอดมิน ATD35: Another setting → "CM4 blink th"
+- NVS key `cm4Blink` (/100) | MQTT `cm4_blink_th` (รับได้ทั้ง /100 และค่าเต็ม)
+- เครื่อง noise สูง (ไฟนิ่งยอด ~1900) แนะนำตั้ง **2000**
+- ไฟล์: `src/varable.h`, `src/main.cpp`, `src/tm1637.h`, `src/run_session.h`
+
+### Rollback
+
+- ย้อนไป: **Version 4.18**
+- โปรเจกต์คู่: ย้อน **ATD_TM** และ **ATD35** ไปเลขเดียวกัน
+
+---
+
+## Version 4.18 (2026-07-26) — CM4 จบรอบต้อง LDR >3500
+
+### step==3 end LDR CodeMachine 4
+
+- ไฟดับจบรอบ: ค่าต้อง **>3500** ค้าง 3 วิ (เดิมสูตร ldr_set+ldrMinus/2 บนบอร์ดใหม่ได้แค่ ~1750)
+- สว่างรีเซ็ตยัง `<1500`
+- เฉพาะ CM4
+- ไฟล์: `src/main.cpp`, `src/varable.h`
+
+### Rollback
+
+- ย้อนไป: **Version 4.17**
+- โปรเจกต์คู่: ย้อน **ATD_TM** และ **ATD35** ไปเลขเดียวกัน
+
+---
+
+## Version 4.17 (2026-07-26) — CM4 เช็ค 02 อ่าน 5 หน้าต่าง
+
+### checkLightStart CodeMachine 4
+
+- `winCount = 5` (เดิม 3) ≈ 10 วิ ก่อนสรุปผล
+- คง EMPTY→ON และยอด ≥1000 = BLINK
+- ไฟล์: `src/main.cpp`, `src/varable.h`
+
+### Rollback
+
+- ย้อนไป: **Version 4.16**
+- โปรเจกต์คู่: ย้อน **ATD_TM** และ **ATD35** ไปเลขเดียวกัน
+
+---
+
+## Version 4.16 (2026-07-26) — CM4 EMPTY ถือเป็น ON
+
+### checkLightStart CodeMachine 4
+
+- หน้าต่าง EMPTY (sample ไม่พอ / ค่าต่ำ) → นับเป็น **ON** ไม่ fail เป็น unstable
+- ไฟล์: `src/main.cpp`, `src/varable.h`
+
+### Rollback
+
+- ย้อนไป: **Version 4.15**
+- โปรเจกต์คู่: ย้อน **ATD_TM** และ **ATD35** ไปเลขเดียวกัน
+
+---
+
+## Version 4.15 (2026-07-26) — CM4 เช็ค 02 แยกด้วยยอด ≥1000 @500ms
+
+### checkLightStart CodeMachine 4 (fault 02)
+
+- อ่านทุก **500ms**, หน้าต่าง **2s × 3** (~6 วิ)
+- ตัด glitch `<35`; มียอด **≥1000** ในหน้าต่าง → BLINK; ไม่มี → ON
+- จาก log ทดสอบ: ไฟนิ่ง max<~800, กระพริบมียอด ≥1000
+- เฉพาะ CM4 — โหมดทดสอบยัง 500ms ตามที่ทดลอง
+- ไฟล์: `src/main.cpp`, `src/varable.h`
+
+### Rollback
+
+- ย้อนไป: **Version 4.14**
+- โปรเจกต์คู่: ย้อน **ATD_TM** และ **ATD35** ไปเลขเดียวกัน
+- ไฟล์ที่ต้องคืน: `src/main.cpp`, `src/varable.h`
+
+---
+
+## Version 4.14 (2026-07-26) — โหมดทดสอบ LDR อ่านทุก 1300ms
+
+### checkLdr1
+
+- ช่วงอ่านทดสอบ: **1300ms** (สาย LDR ยาว ~150 ซม. ลด noise)
+- ไฟล์: `src/main.cpp`, `src/varable.h`
+
+### Rollback
+
+- ย้อนไป: **Version 4.13**
+- โปรเจกต์คู่: ย้อน **ATD_TM** และ **ATD35** ไปเลขเดียวกัน
+
+---
+
+## Version 4.13 (2026-07-26) — โหมดทดสอบ LDR อ่านทุก 900ms
+
+### checkLdr1
+
+- ช่วงอ่านทดสอบ: **900ms** (ค่าดิบทันที ตาม 4.12)
+- ไฟล์: `src/main.cpp`, `src/varable.h`
+
+### Rollback
+
+- ย้อนไป: **Version 4.12**
+- โปรเจกต์คู่: ย้อน **ATD_TM** และ **ATD35** ไปเลขเดียวกัน
+
+---
+
+## Version 4.12 (2026-07-26) — โหมดทดสอบ LDR แสดงค่าดิบทันที
+
+### checkLdr1
+
+- อ่าน `analogRead` แล้วโชว์/พิมพ์ทันที — ไม่เฉลี่ย ไม่จัด ON/BLINK
+- `checkLightStart` CM4 ยังใช้หน้าต่าง 700ms ตามเดิม (4.11)
+- ไฟล์: `src/main.cpp`, `src/varable.h`
+
+### Rollback
+
+- ย้อนไป: **Version 4.11**
+- โปรเจกต์คู่: ย้อน **ATD_TM** และ **ATD35** ไปเลขเดียวกัน
+- ไฟล์ที่ต้องคืน: `src/main.cpp`, `src/varable.h`
+
+---
+
+## Version 4.11 (2026-07-26) — CM4 ทดลองอ่าน LDR ทุก 700ms
+
+### checkLightStart + checkLdr1 CodeMachine 4
+
+- `sampleGapMs` / ช่วงอ่านทดสอบ: **700ms** (เดิม 80ms)
+- หน้าต่าง: **3s × 3** (~9 วิ) ให้ได้อย่างน้อย ~4 จุดต่อหน้าต่าง
+- เฉพาะ CM4 — ทดสอบว่าค่าเสถียรกว่าหรือไม่
+- ไฟล์: `src/main.cpp`, `src/varable.h`
+
+### Rollback
+
+- ย้อนไป: **Version 4.10**
+- โปรเจกต์คู่: ย้อน **ATD_TM** และ **ATD35** ไปเลขเดียวกัน
+- ไฟล์ที่ต้องคืน: `src/main.cpp`, `src/varable.h`
+
+---
+
+## Version 4.10 (2026-07-26) — CM4 แยกไฟนิ่ง / กระพริบใหม่
+
+### checkLightStart + checkLdr1 CodeMachine 4
+
+- ยอดสูง **≥900**; BLINK เมื่อ `highN ≥ 3` หรือ (`highN ≥ 2` และ `max ≥ 1000`)
+- เลิกเกณฑ์ `highN≥1 + span` ที่ทำให้ไฟนิ่ง noise ขึ้น BLINK ผิด
+- คง delay หลัง Start (4.09) + ยืนยัน ON 2 รอบ
+- ไฟล์: `src/main.cpp`, `src/varable.h`
+
+### Rollback
+
+- ย้อนไป: **Version 4.09**
+- โปรเจกต์คู่: ย้อน **ATD_TM** และ **ATD35** ไปเลขเดียวกัน
+- ไฟล์ที่ต้องคืน: `src/main.cpp`, `src/varable.h`
+
+---
+
+## Version 4.09 (2026-07-26) — CM4 รอไฟนิ่งหลัง Start ก่อนอ่าน LDR
+
+### fault 02 CodeMachine 4
+
+- หลัง `Start()` รอ **4 วิ** แล้วค่อยเข้า `checkLightStart` (กันช่วงไฟกำลังติดอ่านเป็น BLINK)
+- ยืนยัน ON รอบ 2: รอ 3 วิ แล้วเช็คซ้ำที่ case 5 — **ไม่กด Start ซ้ำ**
+- ไฟล์: `src/main.cpp`, `src/varable.h`
+
+### Rollback
+
+- ย้อนไป: **Version 4.08**
+- โปรเจกต์คู่: ย้อน **ATD_TM** และ **ATD35** ไปเลขเดียวกัน
+- ไฟล์ที่ต้องคืน: `src/main.cpp` (case 4/5), `src/varable.h`
+
+---
+
+## Version 4.08 (2026-07-26) — ท้ายรอบพึ่ง LDR มืดจริง (เลิกจบนาที 5 ของ CM3/4)
+
+### 5 นาทีสุดท้าย / ค้าง 0:01
+
+- **ลบ** บังคับจบที่ `count_minn_pass == 5` สำหรับ CodeMachine 3/4
+- คง: 15 → fault **01** + จอ `-01-` | 20 → `case 10` รีเซ็ต
+- LDR end (บอร์ดใหม่, Mode 1/6 หรือ CM3/4): มืด **`≥3500`** ค้าง 3 วิ → จบ; สว่างชัด **`<1500`** รีเซ็ตนาฬิกา; ค่ากลางรอต่อ
+- ไฟล์: `src/main.cpp`, `src/varable.h`
+
+### Rollback
+
+- ย้อนไป: **Version 4.07**
+- โปรเจกต์คู่: ย้อน **ATD_TM** และ **ATD35** ไปเลขเดียวกัน
+- ไฟล์ที่ต้องคืน: `src/main.cpp` (`machineRuning`, LDR end step 3), `src/varable.h`
+
+---
+
+## Version 4.07 (2026-07-26) — CM4 จับกระพริบเพดานต่ำ + ยืนยัน ON 2 รอบ
+
+### fault 02 CodeMachine 4
+
+- **สาเหตุ:** ช่วงกระพริบค่าสูงสุดแค่ ~700 ไม่ถึงเกณฑ์ 1000 → ทั้ง 3 หน้าต่างเป็น ON แล้วไปซัก
+- **แก้:** `blinkHighTh` 1000→**700**, `span` 700→**500**; Mode 1 ต้องได้ result 2 **ติดกัน 2 ครั้ง** ก่อนเข้าซัก (`CM4 confirm ON streak`)
+- ไฟล์: `src/main.cpp`, `src/varable.h`
+
+### Rollback
+
+- ย้อนไป: **Version 4.06**
+- โปรเจกต์คู่: ย้อน **ATD_TM** และ **ATD35** ไปเลขเดียวกัน
+- ไฟล์ที่ต้องคืน: `src/main.cpp`, `src/varable.h`
+
+---
+
+## Version 4.06 (2026-07-26) — CM4 เช็ค 02 ยืดเวลา 3×1.5 วิ
+
+### checkLightStart CodeMachine 4
+
+- หน้าต่าง 2×1 วิ → **3×1.5 วิ (~4.5 วิ)** — จับกระพริบได้มั่นคงขึ้น; ON เฉพาะครบทั้ง 3
+- หน้าต่างว่าง (sample ไม่พอ) → `EMPTY` นับไม่ผ่าน (ไม่โชว์ BLINK ปลอม min=4095 max=0)
+- ไฟล์: `src/main.cpp`, `src/varable.h`
+
+### Rollback
+
+- ย้อนไป: **Version 4.05**
+- โปรเจกต์คู่: ย้อน **ATD_TM** และ **ATD35** ไปเลขเดียวกัน
+- ไฟล์ที่ต้องคืน: `src/main.cpp` (`checkLightStart` CM4), `src/varable.h`
+
+---
+
+## Version 4.05 (2026-07-26) — CM4 BLINK เมื่อ highN พอ ไม่บังคับ span
+
+### checkLightStart / checkLdr1 CodeMachine 4
+
+- **สาเหตุ:** `highN=5` แต่ `span=550` ไม่ถึง 700 → ตัดสิน ON ผิด ทั้งที่ไฟกระพริบ
+- **แก้:** BLINK ถ้า `highN ≥ 2` หรือ (`highN ≥ 1` และ `span ≥ 700`)
+- ไฟล์: `src/main.cpp`, `src/varable.h`
+
+### Rollback
+
+- ย้อนไป: **Version 4.04**
+- โปรเจกต์คู่: ย้อน **ATD_TM** และ **ATD35** ไปเลขเดียวกัน
+- ไฟล์ที่ต้องคืน: `src/main.cpp`, `src/varable.h`
+
+---
+
+## Version 4.04 (2026-07-26) — CodeMachine 4 เช็ค 02 ด้วยแอมปลิจูด LDR
+
+### checkLightStart — เฉพาะ CodeMachine 4 + บอร์ดใหม่
+
+- ไม่พึ่งมืด 4095: อ่านถี่ 2 หน้าต่าง × 1 วิ แยก ON/BLINK/OFF แบบโหมดทดสอบ
+- มี BLINK ≥1 หน้าต่าง → result 1 (วน Start แล้ว **02**); ON ทั้ง 2 หน้าต่าง → result 2
+- CodeMachine อื่นใช้ logic เดิม
+- ไฟล์: `src/main.cpp`, `src/varable.h`
+
+### Rollback
+
+- ย้อนไป: **Version 4.03**
+- โปรเจกต์คู่: ย้อน **ATD_TM** และ **ATD35** ไปเลขเดียวกัน
+- ไฟล์ที่ต้องคืน: `src/main.cpp` (`checkLightStart`), `src/varable.h`
+
+---
+
+## Version 4.03 (2026-07-26) — checkLdr1 อ่านถี่จับไฟกระพริบ
+
+### โหมดทดสอบ LDR1
+
+- ช่วงอ่าน 900 ms → **80 ms**; ใช้ `readLDRInstant` แทน average/median
+- เฉพาะ `checkLdr1()` — ไม่แตะ `checkLdr2` / power / `checkLightStart`
+- ไฟล์: `src/main.cpp`, `src/varable.h`
+
+### Rollback
+
+- ย้อนไป: **Version 4.02**
+- โปรเจกต์คู่: ย้อน **ATD_TM** และ **ATD35** ไปเลขเดียวกัน
+- ไฟล์ที่ต้องคืน: `src/main.cpp` (`checkLdr1`), `src/varable.h`
+
+---
+
+## Version 4.02 (2026-07-26) — Mode 1 power check ตามเกณฑ์ &lt;3000 / &gt;3500
+
+### fault 00 — หลักการเรียบ ไม่ใช้ peak/trough
+
+- บอร์ดใหม่: `val < ldr_set` (3000) → ไปต่อทันที; `val > ldr_set+500` (3500) → รอ 5 วิ แล้ว Power ซ้ำ; ครบ 5 ครั้ง → **00**
+- โซน 3000–3500: รออย่างเดียว (ไม่ผ่าน ไม่นับมืด)
+- บอร์ดเก่า: polarity กลับ (`> ldr_set` ไปต่อ / `< ldr_set-500` มืด)
+- ไฟล์: `src/main.cpp`, `src/varable.h`
+
+### Rollback
+
+- ย้อนไป: **Version 4.01**
+- โปรเจกต์คู่: ย้อน **ATD_TM** และ **ATD35** ไปเลขเดียวกัน
+- ไฟล์ที่ต้องคืน: `src/main.cpp` (case 1–2 Mode 1), `src/varable.h`
+
+---
+
+## Version 4.01 (2026-07-26) — checkLightStart กันกระพริบหลุดเป็น Light On
+
+### Mode 1 fault 02 — A+B+C
+
+- **A:** มีค่าเทาในหน้าต่าง 3 วิ → `Light Unstable` (ไม่ประกาศ On)
+- **B:** เกณฑ์มืดผ่อนเป็น `ldrMinus/2` (บอร์ดใหม่ Off เมื่อ >3500 แทน >4000) ให้ค่าอย่าง 3967 นับ Blink Off ได้
+- **C:** มี Blink On ≥2 ครั้ง (กระพริบซ้ำ) → ไม่ประกาศ On; On ได้เฉพาะสว่างนิ่งหลังขอบขึ้นครั้งเดียว และไม่เทา
+- ไฟล์: `src/main.cpp`, `src/varable.h`
+
+### Rollback
+
+- ย้อนไป: **Version 4.00**
+- โปรเจกต์คู่: ย้อน **ATD_TM** และ **ATD35** ไปเลขเดียวกัน
+- ไฟล์ที่ต้องคืน: `src/main.cpp` (`checkLightStart`), `src/varable.h`
+
+---
+
+## Version 4.00 (2026-07-26) — Mode 1 power check ใช้ trough บนบอร์ดใหม่
+
+### fault 00 — จับไฟกระพริบถูกขั้ว
+
+- **สาเหตุ:** `LdrPeakWindow.peak()` = ค่าสูงสุด — บอร์ดใหม่สว่าง=ค่าต่ำ → peak ค้างมืด ไม่ช่วยจับกระพริบ
+- **แก้:** เพิ่ม `trough()` (ต่ำสุด); OldBoard 0 ผ่านเมื่อ `val` หรือ `trough` ≤ `ldr_set`; OldBoard 1 ยังใช้ `peak` (สูง=สว่าง)
+- รวม case 2 Mode 1 เป็นบล็อกเดียวตาม polarity
+- ไฟล์: `src/ldr_sampler.h`, `src/main.cpp`, `src/varable.h`
+
+### Rollback
+
+- ย้อนไป: **Version 3.99**
+- โปรเจกต์คู่: ย้อน **ATD_TM** และ **ATD35** ไปเลขเดียวกัน
+- ไฟล์ที่ต้องคืน: `src/ldr_sampler.h`, `src/main.cpp`, `src/varable.h`
+
+---
+
+## Version 3.99 (2026-07-26) — checkLightStart หลักการเดียวทั้ง OldBoard 0/1
+
+### Mode 1 start — polarity กลับกันตามบอร์ด
+
+- รวม logic เป็นชุดเดียว: สว่างนิ่ง→2, มืดนิ่ง→0, โซนเทา/กระพริบครบ→1 (retry แล้ว 02)
+- **OldBoard 1:** สูง=สว่าง (`> ldr_set`) / ต่ำ=มืด (`< ldr_set-ldrMinus`) — ไม่นับโซนเทาเป็น On Count อีก
+- **OldBoard 0:** ต่ำ=สว่าง / สูง=มืด (เหมือน v3.98)
+- ไฟล์: `src/main.cpp`, `src/varable.h`
+
+### Rollback
+
+- ย้อนไป: **Version 3.98**
+- โปรเจกต์คู่: ย้อน **ATD_TM** และ **ATD35** ไปเลขเดียวกัน
+- ไฟล์ที่ต้องคืน: `src/main.cpp` (`checkLightStart`), `src/varable.h`
+
+---
+
+## Version 3.98 (2026-07-26) — checkLightStart ไม่ถือโซนเทาเป็น Light On
+
+### Mode 1 start — ไฟกระพริบต้อง retry แล้ว 02
+
+- **สาเหตุ:** timeout 3 วิ ของ `checkLightStart` (OldBoard 0) ถือค่ากลาง (`ldr_set` < val ≤ `ldr_set+ldrMinus`) เป็น On → ไปซักต่อทั้งที่ไฟกระพริบ ไม่ถึง error 02
+- **แก้:** On เฉพาะ `<= ldr_set`; Off เมื่อ `> ldr_set+ldrMinus`; โซนเทา → `Light Unstable` คืน 1 (Mode 1 วน Start แล้วครบ 5 ครั้ง → 02)
+- ไฟล์: `src/main.cpp`, `src/varable.h`
+
+### Rollback
+
+- ย้อนไป: **Version 3.97**
+- โปรเจกต์คู่: ย้อน **ATD_TM** และ **ATD35** ไปเลขเดียวกัน
+- ไฟล์ที่ต้องคืน: `src/main.cpp` (`checkLightStart` timeout), `src/varable.h`
+
+---
+
 ## Version 3.97 (2026-07-08) — กัน setRelayType ทับเวลาโปรแกรมเป็น 31
 
 ### TimeCountdown sync

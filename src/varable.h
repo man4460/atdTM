@@ -13,16 +13,20 @@
 // =============================================================================
 
 // --- 1) บอร์ด & เวอร์ชัน firmware ---
-#define OldBoard 1 // 0 = บอร์ดใหม่ (ai_new) | 1 = บอร์ดเก่า (ai_old)
+#define OldBoard 0 // 0 = บอร์ดใหม่ (ai_new) | 1 = บอร์ดเก่า (ai_old)
 
-const char *fwversion[] = {"Current Firmware\r\n", "Version 3.97\r\n"};
+const char *fwversion[] = {"Current Firmware\r\n", "Version 4.26\r\n"};
 
 // --- 2) ตัวเครื่อง / Melody (ต้องตรงกับหน้าแก้ไขเครื่องในเว็บ) ---
-int gid = 99;
+int gid = 999;
 String Noserial = "65M000000";
 String IDserver = "94"; // SharePoint list item ID
 int CodeMachine = 0;
 int Mode = 2;
+
+// int gid = 45;
+// String Noserial = "68M450404";
+// String IDserver = ""; // SharePoint list item ID
 
 // --- 4) MQTT — v4 WSS (Melody machines.version=4) หรือ TCP เก่า (v1–v3) ---
 #define MELODY_PROTOCOL_VERSION 4
@@ -47,6 +51,8 @@ String ssidStr = "melody";
 String passStr = "0815418771";
 // String ssidStr = "man4460base_2.4G";
 // String passStr = "Man0815418771";
+// String ssidStr = "Yindee_2.4GHz";
+// String passStr = "123456789";
 
 
 
@@ -82,6 +88,8 @@ int ldrMinus = 500;
 int ldr_set = 3000;
 int ldrMinus = 1000;
 #endif
+// CM4 เช็ค 02: ยอด ≥ ค่านี้ = กระพริบ (แอดมินปรับได้ — เครื่อง noise สูงอาจตั้ง 2000)
+int cm4_blink_th = 2000;
 
 // =============================================================================
 //  HARDWARE — pin ตามบอร์ด (แก้เมื่อเปลี่ยนบอร์ดเท่านั้น)

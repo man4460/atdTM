@@ -444,6 +444,16 @@ const uint8_t SEG_Lrmin[] = {
   SEG_C | SEG_E | SEG_G               // n 
 };
 
+const uint8_t SEG_bL[] = {
+  SEG_C | SEG_F | SEG_E | SEG_G | SEG_D, // b
+  SEG_E | SEG_F | SEG_D                  // L
+};
+
+const uint8_t SEG_LP[] = {
+  SEG_E | SEG_F | SEG_D,                               // L
+  SEG_A | SEG_B | SEG_E | SEG_F | SEG_G                // P
+};
+
 const uint8_t SEG_SlotPin[] = {
   SEG_A | SEG_F | SEG_G | SEG_C | SEG_D, // S
   SEG_E | SEG_F | SEG_D                 // L
