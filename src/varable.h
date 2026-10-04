@@ -13,9 +13,9 @@
 // =============================================================================
 
 // --- 1) บอร์ด & เวอร์ชัน firmware ---
-#define OldBoard 0 // 0 = บอร์ดใหม่ (ai_new) | 1 = บอร์ดเก่า (ai_old)
+#define OldBoard 1 // 0 = บอร์ดใหม่ (ai_new) | 1 = บอร์ดเก่า (ai_old)
 
-const char *fwversion[] = {"Current Firmware\r\n", "Version 4.30\r\n"};
+const char *fwversion[] = {"Current Firmware\r\n", "Version 4.34\r\n"};
 
 // --- 2) ตัวเครื่อง / Melody (ต้องตรงกับหน้าแก้ไขเครื่องในเว็บ) ---
 int gid = 999;
@@ -24,9 +24,9 @@ String IDserver = "94"; // SharePoint list item ID
 int CodeMachine = 0;
 int Mode = 2;
 
-// int gid = 45;
-// String Noserial = "68M450404";
-// String IDserver = ""; // SharePoint list item ID
+// int gid = 31;
+// String Noserial = "67M310285";
+// String IDserver = "293"; // SharePoint list item ID
 
 // --- 4) MQTT — v4 WSS (Melody machines.version=4) หรือ TCP เก่า (v1–v3) ---
 #define MELODY_PROTOCOL_VERSION 4
@@ -53,6 +53,8 @@ String passStr = "0815418771";
 // String passStr = "Man0815418771";
 // String ssidStr = "Yindee_2.4GHz";
 // String passStr = "123456789";
+// String ssidStr = "Wash_2.4G";
+// String passStr = "#88889999";
 
 
 

@@ -6,6 +6,76 @@
 
 ---
 
+## Version 4.34 (2026-10-01) — จบรอบ: LDR เฉลี่ย 1 วิ + มืดติดกัน 3 ครั้ง
+
+### เช็ค LDR ตอนจบ (step 3)
+
+- เดิม: median 10 ครั้งห่าง 4 ms (~40 ms) + ต้องมืดต่อเนื่อง 3 วิ — LDR สวิงครั้งเดียวรีเซ็ต เครื่องดับแล้วไม่จบ
+- ใหม่: `LdrMeanSampler` อ่าน **10 ครั้ง ห่าง 100 ms** แล้ว**เฉลี่ย** (~1 วิ)
+- ต้องได้ค่าเฉลี่ย**มืดติดกัน 3 ครั้ง** (`LDR_END_DARK_STREAK`) ถึงจบ — ไม่มืด (สว่าง/เทา) นับใหม่
+- เกณฑ์มืดเดิม (โปรไฟล์ / `ldr_set`); Power / Start / เรียนโปรไฟล์ไม่เปลี่ยน
+- Serial: `end dark streak=N`
+
+### Rollback
+
+- ย้อนไป: **Version 4.33**
+- โปรเจกต์คู่: ย้อน **ATD_TM** และ **ATD35** ไปเลขเดียวกัน
+- ไฟล์: `src/main.cpp`, `src/ldr_sampler.h`, `src/varable.h`
+
+---
+
+## Version 4.33 (2026-10-01) — ล้างถัง (โปรแกรม 4) ไม่แจ้ง 01
+
+### โปรแกรม 4 ล้างถังซัก
+
+- ตัวนับถึงนาทีสุดท้าย → ค้าง `00:01` **ไม่นับ** `count_minn_pass` (ไม่แจ้ง 01 / ไม่รีเซ็ตที่ 20 นาที)
+- เข้า step 3 รอ LDR มืดค้าง ≥3 วิ → `DONE` + รีเซ็ต (`endProgram = true` ไม่กด Start/Power ซ้ำ)
+- ไม่มี timeout — ถ้า LDR เสียจะรอจนกว่าไฟดับ
+- โปรแกรมอื่นคงเดิม
+
+### Rollback
+
+- ย้อนไป: **Version 4.32**
+- โปรเจกต์คู่: ย้อน **ATD_TM** และ **ATD35** ไปเลขเดียวกัน
+- ไฟล์: `src/main.cpp`, `src/varable.h`
+
+---
+
+## Version 4.32 (2026-08-29) — Mode 7: ซักข้ามเช็ค LDR หลัง Start
+
+### Mode 7
+
+- **Power** ยังเช็ค LDR (โปรไฟล์ / `ldr_set`) เหมือน Mode 1
+- **หลัง Start** ข้าม `checkLightStart` — ไม่ขึ้น fault 02 จากขั้นตอนเช็คประตู/ไฟ
+- ใช้เมื่อ LDR ไม่เสถียร แยกไฟกระพริบกับค้างไม่ได้
+- ตั้ง Mode = 7 (กดค้าง BACK หรือ Melody `ModeSystem`)
+
+### Rollback
+
+- ย้อนไป: **Version 4.31**
+- โปรเจกต์คู่: ย้อน **ATD_TM** และ **ATD35** ไปเลขเดียวกัน
+- ไฟล์: `src/main.cpp`, `src/varable.h`, `ADMIN_SETTINGS_GUIDE.md`
+
+---
+
+## Version 4.31 (2026-08-27) — LDR เรียน/ตรวจมืดรับค่า 0 (บอร์ดเก่า)
+
+### บอร์ดเก่าไฟมืด = 0
+
+- เดิม `LDR_GLITCH_FLOOR = 35` ตัด sample < 35 → เรียน OFF / dark ไม่สำเร็จเมื่อมืดจริง = 0
+- **`learnLdrOffProfile` / `learnLdrBlinkProfile`:** รับ raw = 0
+- **`LdrAvgSampler` / `readLDRAverage` / `LdrPeakWindow`:** รับ 0 (median กรอง spike)
+- **`checkLightOnOff` / `checkLightWithProfile`:** ถ้าโปรไฟล์มืด/ปิด < 35 ใช้ floor = 0
+- เรียน ON ยังตัด < 35 กัน spike ดึงค่าเฉลี่ยลง
+
+### Rollback
+
+- ย้อนไป: **Version 4.30**
+- โปรเจกต์คู่: ย้อน **ATD_TM** และ **ATD35** ไปเลขเดียวกัน
+- ไฟล์: `src/ldr_sampler.h`, `src/varable.h`
+
+---
+
 ## Version 4.30 (2026-08-21) — สลับแหล่ง LDR: โปรไฟล์ที่เรียน vs ldr_set
 
 ### เลือกแหล่งตรวจไฟ
